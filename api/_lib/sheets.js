@@ -30,18 +30,15 @@ async function getAuthClient() {
 async function getSheetData(sheetName) {
   const auth = await getAuthClient();
   const sheets = google.sheets({ version: 'v4', auth });
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: DB_SHEET_ID,
-      range: sheetName,
-      valueRenderOption: 'UNFORMATTED_VALUE',
-      dateTimeRenderOption: 'SERIAL_NUMBER',
-    });
-    return res.data.values || [];
-  } catch (e) {
-    console.error(`[sheets] getSheetData error (${sheetName}):`, e.message);
-    return [];
-  }
+  
+  // Removed try-catch to propagate the error up to the Vercel handler for debugging
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: DB_SHEET_ID,
+    range: sheetName,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  });
+  return res.data.values || [];
 }
 
 /**
