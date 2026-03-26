@@ -117,10 +117,17 @@
                         <option value="">-- Todos los Agentes Comerciales --</option>
                     </select>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions" style="align-items: center;">
                     <button class="btn btn-secondary" onclick="refreshCache()">
                         <i data-lucide="refresh-cw" id="refresh-icon" style="width: 18px;"></i>
                         <span id="refresh-text">Actualizar</span>
+                    </button>
+                    <div class="view-mode-toggle" style="display: flex; background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 0.25rem; border: 1px solid var(--border-color); margin-right: 0.5rem;">
+                      <button id="btn-mode-depto" class="toggle-btn active" onclick="setMapMode('DEPTO')">Departamentos</button>
+                      <button id="btn-mode-region" class="toggle-btn" onclick="setMapMode('REGION')">Regiones</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="clearZoneSelection()" id="btn-clear-zona" style="display: none; padding: 0.4rem 0.75rem; font-size: 0.75rem;">
+                      <i data-lucide="x" style="width: 14px;"></i> Limpiar Selección
                     </button>
                     <div class="btn btn-secondary">
                         <i data-lucide="bell" style="width: 18px;"></i>

@@ -9,6 +9,15 @@ let GEO_MAX_Q = 1;
 let GEO_CACHE_ALL = {};
 let GEO_CACHE_AC = {};
 let GEO_CACHE_NAME = '';
+let VIEW_MODE = 'DEPTO';
+
+const REGION_COLORS = {
+  'NOA': '#8B4513', 'NEA': '#90EE90', 'CORR': '#DC143C', 'ER': '#006400',
+  'CBA NORTE': '#DA70D6', 'CBA + SL SUR': '#4169E1', 'CUYO': '#800080',
+  'STA FE NORTE': '#FF8C00', 'STA FE SUR': '#FFA07A', 'BA Norte Corredor 8/9': '#00008B',
+  'BA Oeste Produ': '#4682B4', 'LPA': '#87CEEB', 'BA Cuenca Sala': '#3CB371',
+  'BA Sudoeste/Atl': '#FF69B4', 'PAT': '#2F4F4F'
+};
 
 const DEPTO_ALIASES = {
   '9 DE JULIO':'NUEVE DE JULIO', '25 DE MAYO':'VEINTICINCO DE MAYO',
@@ -89,6 +98,25 @@ function findDeptoKey(fKey, map) {
     return matchKey;
   }
   return null;
+}
+
+function findRegionKey(fKey, map) {
+  if (map[fKey]) return map[fKey];
+  var parts = fKey.split('|');
+  var fBase = parts[0];
+  var fProv = parts[1] || '';
+  for (var k in map) {
+    if (k.split('|')[0] === fBase) {
+      if (fProv && k.split('|')[1] && k.split('|')[1] !== fProv) continue;
+      return map[k];
+    }
+  }
+  return null;
+}
+
+function getRegionKey(featureKey) {
+  if (!TERR_DATA || !TERR_DATA.deptoToRegion) return null;
+  return findRegionKey(featureKey, TERR_DATA.deptoToRegion);
 }
 
 function arrayContains(arr, val) {
@@ -284,12 +312,25 @@ function drawGeoLayer(geojson, allByDepto, acByDepto, acName) {
     onEachFeature: (feature, layer) => {
       const name = extractName(feature.properties);
       const fKey = extractKey(feature.properties);
-      layer.bindTooltip(name, { sticky: true });
+      layer.bindTooltip('', { sticky: true });
+      
       layer.on('click', function () {
-        const dep = findDeptoKey(fKey, allByDepto) || findDeptoKey(fKey, acByDepto) || fKey;
-        const idx = SELECTED_DEPTOS.indexOf(dep);
-        if (idx >= 0) SELECTED_DEPTOS.splice(idx, 1);
-        else SELECTED_DEPTOS.push(dep);
+        if (VIEW_MODE === 'REGION') {
+          const region = getRegionKey(fKey);
+          if (!region) return;
+          const isSelected = SELECTED_DEPTOS.some(d => getRegionKey(d) === region);
+          SELECTED_DEPTOS = SELECTED_DEPTOS.filter(d => getRegionKey(d) !== region);
+          
+          if (!isSelected) {
+            const allDeptosInRegion = Object.keys(TERR_DATA.deptoToRegion).filter(k => TERR_DATA.deptoToRegion[k] === region);
+            SELECTED_DEPTOS.push(...allDeptosInRegion);
+          }
+        } else {
+          const dep = findDeptoKey(fKey, allByDepto) || findDeptoKey(fKey, acByDepto) || fKey;
+          const idx = SELECTED_DEPTOS.indexOf(dep);
+          if (idx >= 0) SELECTED_DEPTOS.splice(idx, 1);
+          else SELECTED_DEPTOS.push(dep);
+        }
         
         refreshLayerStyles();
         updateZonePanel_Stats(allByDepto, acByDepto, acName);
@@ -297,7 +338,7 @@ function drawGeoLayer(geojson, allByDepto, acByDepto, acName) {
         const badge = document.getElementById('selected-badge');
         const btn = document.getElementById('btn-clear-zona');
         if (SELECTED_DEPTOS.length > 0) {
-          badge.textContent = SELECTED_DEPTOS.length + ' selecc.';
+          badge.textContent = SELECTED_DEPTOS.length + (VIEW_MODE === 'REGION' ? ' deptos selecc.' : ' selecc.');
           badge.style.display = 'inline-block';
           btn.style.display = 'inline-block';
         } else {
@@ -305,8 +346,33 @@ function drawGeoLayer(geojson, allByDepto, acByDepto, acName) {
           btn.style.display = 'none';
         }
       });
-      layer.on('mouseover', function () { this.setStyle({ weight: 2, color: '#3b82f6' }); });
-      layer.on('mouseout', function () { GEO_LAYER.resetStyle(this); });
+      
+      layer.on('mouseover', function () { 
+        const region = getRegionKey(fKey);
+        const resp = (region && TERR_DATA && TERR_DATA.regionMap && TERR_DATA.regionMap[region]) ? TERR_DATA.regionMap[region] : 'N/A';
+        const tt = VIEW_MODE === 'REGION' ? `<div style="text-align:center"><b>Región:</b> ${region || 'Sin región'}<br><b>Resp:</b> ${resp}</div>` : `<b>${name}</b>`;
+        this.setTooltipContent(tt);
+        
+        if (VIEW_MODE === 'REGION') {
+          if (region) {
+            GEO_LAYER.eachLayer(l => {
+              if (getRegionKey(extractKey(l.feature.properties)) === region) {
+                l.setStyle({ weight: 2, color: '#ffffff', fillOpacity: 0.8 });
+              }
+            });
+          }
+        } else {
+          this.setStyle({ weight: 2, color: '#3b82f6' }); 
+        }
+      });
+      
+      layer.on('mouseout', function () { 
+        if (VIEW_MODE === 'REGION') {
+          refreshLayerStyles();
+        } else {
+          GEO_LAYER.resetStyle(this); 
+        }
+      });
     }
   }).addTo(MAP);
   
@@ -327,6 +393,18 @@ function styleFeature(featureKey) {
   const data = dep ? GEO_CACHE_ALL[dep] : null;
 
   if (isSelected) return { fillColor: '#f59e0b', fillOpacity: 0.7, weight: 2, color: '#fff' };
+
+  if (VIEW_MODE === 'REGION') {
+    const region = getRegionKey(featureKey);
+    // Let's use string matching for the prefix since the exact strings might differ sometimes depending on Google sheets
+    const rColorKey = Object.keys(REGION_COLORS).find(k => region && region.toUpperCase().startsWith(k.toUpperCase()));
+    if (rColorKey) {
+       return { fillColor: REGION_COLORS[rColorKey], fillOpacity: 0.6, weight: 0.5, color: 'rgba(255,255,255,0.2)' };
+    } else {
+       return { fillColor: '#21262d', fillOpacity: 0.1, weight: 0.5, color: 'rgba(255,255,255,0.1)' };
+    }
+  }
+
   if (depAC && GEO_CACHE_NAME && GEO_CACHE_NAME !== '') return { fillColor: '#3b82f6', fillOpacity: 0.5, weight: 1, color: '#2563eb' };
   
   return { 
@@ -351,7 +429,13 @@ function colorScale(t) {
   return `rgb(${r},${g},${b})`;
 }
 
-// --- Sidebar & Global Actions ---
+window.setMapMode = function(mode) {
+  VIEW_MODE = mode;
+  document.getElementById('btn-mode-depto').classList.toggle('active', mode === 'DEPTO');
+  document.getElementById('btn-mode-region').classList.toggle('active', mode === 'REGION');
+  window.clearZoneSelection();
+};
+
 window.onACChange = function() {
   const ac = document.getElementById('selAC').value;
   SELECTED_DEPTOS = [];

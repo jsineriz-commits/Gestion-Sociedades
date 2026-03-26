@@ -223,7 +223,40 @@ async function buildGlobalMaps() {
     }
   }
 
-  const result = { emailToNameMap, acIdToNameMap, admGlobalMap, commentsSet, allByDepto, deptoAcMap, bcRaw };
+  // ── 6. ROSTER-REGIONES: regionMap & deptoToRegion ───────────────────────────
+  const regionMap = {};
+  const deptoToRegion = {};
+  const dReg = await getSheetData('Roster-Regiones');
+  
+  for (let i = 1; i < dReg.length; i++) {
+    const row = dReg[i];
+    const rName = String(g(row, 7)).trim();
+    const rResp = String(g(row, 11)).trim();
+    if (rName) regionMap[rName] = rResp || 'Sin asignar';
+  }
+
+  const provMapBackend = {
+    'BUENOS AIRES':'BA','CORRIENTES':'COR','CORDOBA':'CBA','ENTRE RIOS':'ER',
+    'FORMOSA':'FOR','LA PAMPA':'LPA','SANTIAGO DEL ESTERO':'SDE','SALTA':'SAL',
+    'CHUBUT':'CHU','LA RIOJA':'LRJ','CHACO':'CHA','RIO NEGRO':'RN','SAN LUIS':'SLU',
+    'MENDOZA':'MZA','NEUQUEN':'NQN','SANTA FE':'SFE','TUCUMAN':'TUC','JUJUY':'JUJ',
+    'CATAMARCA':'CAT','MISIONES':'MIS','SAN JUAN':'SJU','TIERRA DEL FUEGO':'TDF',
+    'CIUDAD AUTONOMA DE BUENOS AIRES':'CABA','CIUDAD DE BUENOS AIRES':'CABA','MDZ':'MZA'
+  };
+
+  for (let i = 1; i < dReg.length; i++) {
+    const row = dReg[i];
+    const provRaw = String(g(row, 0)).trim().toUpperCase();
+    const deptoRaw = normSrv(g(row, 1));
+    const regName = String(g(row, 3)).trim();
+    if (deptoRaw && regName) {
+      const provK = provMapBackend[provRaw] || '';
+      const key = deptoRaw + (provK ? '|' + provK : '');
+      deptoToRegion[key] = regName;
+    }
+  }
+
+  const result = { emailToNameMap, acIdToNameMap, admGlobalMap, commentsSet, allByDepto, deptoAcMap, bcRaw, regionMap, deptoToRegion };
   cacheSet('global', result);
   console.log('[logic] buildGlobalMaps: completado y cacheado.');
   return result;
@@ -376,6 +409,8 @@ async function getTerritoryData(acName) {
     acLeadsRaw,
     deptoAcMap:    liveDeptoAcMap,
     acAdmByDepto,
+    regionMap:     gMaps.regionMap || {},
+    deptoToRegion: gMaps.deptoToRegion || {}
   };
 }
 

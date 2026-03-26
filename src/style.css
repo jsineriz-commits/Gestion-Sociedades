@@ -428,3 +428,8 @@ h1, h2, h3, h4 {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.view-mode-toggle { display: flex; background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 0.25rem; border: 1px solid var(--border-color); margin-right: 0.5rem; }
+.toggle-btn { background: transparent; border: none; color: var(--text-secondary); padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 500; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); }
+.toggle-btn:hover { color: var(--text-primary); }
+.toggle-btn.active { background: var(--bg-secondary); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
