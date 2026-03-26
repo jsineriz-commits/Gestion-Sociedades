@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión Sociedades | Territorio Vercel</title>
+    <meta name="description" content="Dashboard premium para gestión de sociedades y análisis de territorio dCaC.">
+    <link rel="stylesheet" href="/src/style.css">
+    
+    <!-- External Dependencies: Leaflet, Lucide, Chart.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/topojson@3/dist/topojson.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+        /* Map specific tweaks to fit premium design */
+        #map { 
+            height: 520px; 
+            border-radius: var(--radius-lg); 
+            z-index: 10;
+            box-shadow: var(--shadow-xl);
+            filter: grayscale(0.1) contrast(1.1);
+        }
+        .leaflet-container {
+            background: var(--bg-secondary) !important;
+        }
+        .leaflet-bar a {
+            background-color: var(--bg-tertiary) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
+        }
+        /* Custom Loader */
+        .loader-overlay {
+            position: fixed; inset: 0; background: rgba(5, 5, 5, 0.9); backdrop-filter: blur(12px);
+            z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1rem;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 3px solid rgba(59, 130, 246, 0.1);
+            border-top: 3px solid var(--accent-primary); border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <!-- Global Loader -->
+    <div class="loader-overlay" id="globalLoader">
+        <div class="spinner"></div>
+        <div class="text-secondary fw-semibold">Cargando Territorio...</div>
+    </div>
+
+    <div class="hero-gradient"></div>
+    
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <i data-lucide="layers" style="color: white; width: 18px; height: 18px;"></i>
+                </div>
+                <h1 class="logo-text">GestionSoc</h1>
+            </div>
+
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link active" onclick="showDashboard()">
+                            <i data-lucide="layout-dashboard"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            <i data-lucide="briefcase"></i>
+                            <span>Sociedades</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            <i data-lucide="map"></i>
+                            <span>Análisis Territorio</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            <i data-lucide="users"></i>
+                            <span>Socios</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                      <a href="#" class="nav-link">
+                          <i data-lucide="bar-chart-3"></i>
+                          <span>KPIs & Reportes</span>
+                      </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="avatar">JS</div>
+                <div class="user-info">
+                    <h4>Juan Sineriz</h4>
+                    <p>Administrador</p>
+                </div>
+                <i data-lucide="chevron-up" style="margin-left: auto; color: var(--text-secondary); width: 16px;"></i>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content" id="app" style="display:none;">
+            <!-- Top Bar -->
+            <header class="top-bar fade-in">
+                <div class="search-container">
+                    <select id="selAC" class="btn-secondary" style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 0.625rem 1rem; border-radius: var(--radius-md); color: var(--text-primary); width: 100%;" onchange="onACChange()">
+                        <option value="">-- Todos los Agentes Comerciales --</option>
+                    </select>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshCache()">
+                        <i data-lucide="refresh-cw" id="refresh-icon" style="width: 18px;"></i>
+                        <span id="refresh-text">Actualizar</span>
+                    </button>
+                    <div class="btn btn-secondary">
+                        <i data-lucide="bell" style="width: 18px;"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- KPIs Summary Grid -->
+            <section class="stats-grid fade-in">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span>Total Sociedades BC</span>
+                        <i data-lucide="building-2"></i>
+                    </div>
+                    <div class="stat-value" id="t-ac-bc-tot">-</div>
+                    <div class="stat-change" style="display:flex; gap: 10px;">
+                        <span class="text-warning">Kt: <b id="t-ac-bc-qt">-</b></span>
+                        <span class="text-success">Kv: <b id="t-ac-bc-qv">-</b></span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span>Sociedades dCaC</span>
+                        <i data-lucide="map-pin"></i>
+                    </div>
+                    <div class="stat-value" id="t-ac-dcac-tot">-</div>
+                    <div class="stat-change positive">
+                        Gestionadas: <b id="t-ac-dcac-act">-</b>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span>% Efectividad dCaC</span>
+                        <i data-lucide="trending-up"></i>
+                    </div>
+                    <div class="stat-value" id="t-ac-dcac-pct">0%</div>
+                    <div class="stat-change positive">En zona seleccionada</div>
+                </div>
+                <div class="stat-card">
+                   <div class="stat-header">
+                       <span>Gestión Asignada</span>
+                       <i data-lucide="check-circle"></i>
+                   </div>
+                   <div class="stat-value" id="zp-ld-asig">0</div>
+                   <div class="stat-change positive">
+                       Ult. 3 Meses
+                   </div>
+               </div>
+            </section>
+
+            <!-- Map & Analysis Section -->
+            <div class="dashboard-grid fade-in" style="display: grid; grid-template-columns: 1fr 340px; gap: 2rem; margin-top: 2rem;">
+                <div class="content-left">
+                    <div class="section-header">
+                        <div style="display:flex; align-items:center; gap: 10px;">
+                            <h2 id="zona-titulo">Mapa de Territorio</h2>
+                            <span id="selected-badge" class="status-badge status-pending" style="display:none;"></span>
+                        </div>
+                        <button id="btn-clear-zona" class="btn btn-secondary" style="display:none;" onclick="clearZoneSelection()">Limpiar Zona</button>
+                    </div>
+                    <div id="map"></div>
+
+                    <!-- Societies Table (Below Map) -->
+                    <div class="section-header" style="margin-top: 2.5rem;">
+                        <h2>Sociedades del AC</h2>
+                        <div class="header-actions">
+                            <span class="status-badge status-active">Total filtrado: <b id="soc-count">0</b></span>
+                        </div>
+                    </div>
+                    <div class="glass-table-card">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Sociedad</th>
+                                    <th>Departamento</th>
+                                    <th class="text-end">Kt / Kv</th>
+                                </tr>
+                            </thead>
+                            <tbody id="soc-tbody"></tbody>
+                            <tfoot style="background: rgba(255,255,255,0.02);">
+                                <tr>
+                                    <td colspan="2" style="padding: 1rem 1.5rem; font-weight: 700;">TOTAL Kt / Kv</td>
+                                    <td class="text-end" style="padding: 1rem 1.5rem;" id="soc-total-q">-</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar: Ranking & Stats -->
+                <div class="content-right" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <!-- Ranking Panel -->
+                    <div class="stat-card glass-morphism" id="zp-ranking-section">
+                        <div class="stat-header">
+                            <span style="font-weight: 700;">Ranking de Efectividad AC</span>
+                            <i data-lucide="award" style="color: gold;"></i>
+                        </div>
+                        <p id="ranking-period" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">(Últ. 3 meses)</p>
+                        <div id="zp-ranking-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 400px; overflow-y: auto; padding-right: 5px;"></div>
+                    </div>
+
+                    <!-- Analysis Filter -->
+                    <div class="stat-card glass-morphism">
+                        <div class="stat-header">
+                           <span>Análisis de Gestión</span>
+                           <i data-lucide="filter"></i>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label style="font-size: 0.7rem; color: var(--text-secondary); display:block; margin-bottom: 5px;">Periodo de Gestión</label>
+                            <select id="zp-leads-months" class="btn btn-secondary" style="width:100%; text-align: left;" onchange="recalcLeads()">
+                                <option value="1">1 mes</option>
+                                <option value="2">2 meses</option>
+                                <option value="3" selected>3 meses</option>
+                                <option value="6">6 meses</option>
+                                <option value="12">12 meses</option>
+                            </select>
+                        </div>
+                        <div class="stats-mini-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 1rem;">
+                            <div class="stat-card" style="padding: 0.75rem; background: rgba(255,255,255,0.02);">
+                                <div id="zp-ld-comm" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-primary);">0</div>
+                                <div style="font-size: 0.65rem; color: var(--text-secondary);">CON COMENTS.</div>
+                            </div>
+                            <div class="stat-card" style="padding: 0.75rem; background: rgba(255,255,255,0.02);">
+                                <div id="zp-ld-act" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-secondary);">0</div>
+                                <div style="font-size: 0.65rem; color: var(--text-secondary);">ACT. POST.</div>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="margin-top: 10px; padding: 0.75rem; background: rgba(255,255,255,0.02); text-align:center;">
+                            <div id="zp-ld-pct" style="font-size: 1.5rem; font-weight: 700; color: #fff;">0%</div>
+                            <div style="font-size: 0.65rem; color: var(--text-secondary);">EFECTIVIDAD</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Initialization Scripts -->
+    <script type="module" src="/src/main.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
