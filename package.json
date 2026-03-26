@@ -1,8 +1,16 @@
 {
-  "name": "territorio-ac",
+  "name": "gestion-sociedades-vercel",
   "version": "1.0.0",
   "engines": { "node": "18.x" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "googleapis": "^140.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
   }
 }
