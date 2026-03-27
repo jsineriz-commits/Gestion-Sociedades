@@ -62,4 +62,4 @@ function g(row, idx) {
     : '';
 }
 
-module.exports = { getSheetData, serialToDate, g, DB_SHEET_ID };
+module.exports = { getAuthClient, getSheetData, serialToDate, g, DB_SHEET_ID };
