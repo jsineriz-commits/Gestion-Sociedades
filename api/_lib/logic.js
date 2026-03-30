@@ -79,10 +79,20 @@ async function buildGlobalMaps() {
 
   console.log('[logic] buildGlobalMaps: cache miss, leyendo Sheets...');
 
+  // ── FETCH CONCURRENTE (Evita Timeout 500 en Vercel) ──────────
+  const [dAux, dAdm, dLeads, dCom, dBc, dOps, dReg] = await Promise.all([
+    getSheetData('aux'),
+    getSheetData('Datos_Metabase'),
+    getSheetData('Leads'),
+    getSheetData('Comentarios'),
+    getSheetData('BC Nueva'),
+    getSheetData('OPS'),
+    getSheetData('Roster-Regiones')
+  ]);
+
   // ── 1. AUX ──────────────────────────────────────────────────────────────────
   const emailToNameMap = {};
   const acIdToNameMap = {};
-  const dAux = await getSheetData('aux');
   for (let i = 1; i < dAux.length; i++) {
     const row = dAux[i];
     const acEmail = String(g(row, 20)).trim().toLowerCase();
@@ -102,7 +112,6 @@ async function buildGlobalMaps() {
 
   // ── 2. DATOS_METABASE ────────────────────────────────────────────────────────
   const admGlobalMap = {};
-  const dAdm = await getSheetData('Datos_Metabase');
   for (let i = 1; i < dAdm.length; i++) {
     const row   = dAdm[i];
     const cuit  = String(g(row, 1)).trim();
@@ -129,7 +138,6 @@ async function buildGlobalMaps() {
 
   // ── 2.5 LEADS: cuitToDeptoMap ────────────────────────────────────────────────
   const cuitToDeptoMap = {};
-  const dLeads = await getSheetData('Leads');
   for (let i = 1; i < dLeads.length; i++) {
     const row   = dLeads[i];
     const lCuit  = String(g(row, 11)).trim();
@@ -142,7 +150,6 @@ async function buildGlobalMaps() {
 
   // ── 3. COMENTARIOS ──────────────────────────────────────────────────────────
   const commentsSet = {};
-  const dCom = await getSheetData('Comentarios');
   for (let i = 1; i < dCom.length; i++) {
     const row   = dCom[i];
     const idA   = String(g(row, 0)).trim();
@@ -156,7 +163,6 @@ async function buildGlobalMaps() {
   const allByDepto = {};
   const deptoAcMap = {};
   const bcRaw      = [];
-  const dBc = await getSheetData('BC Nueva');
 
   for (let i = 1; i < dBc.length; i++) {
     const row       = dBc[i];
@@ -212,7 +218,6 @@ async function buildGlobalMaps() {
   }
 
   // ── 5. OPS: enriquecer qoperada ─────────────────────────────────────────────
-  const dOps = await getSheetData('OPS');
   for (let i = 1; i < dOps.length; i++) {
     const row = dOps[i];
     const q   = parseFloat(g(row, 9))  || 0;
@@ -226,7 +231,6 @@ async function buildGlobalMaps() {
   // ── 6. ROSTER-REGIONES: regionMap & deptoToRegion ───────────────────────────
   const regionMap = {};
   const deptoToRegion = {};
-  const dReg = await getSheetData('Roster-Regiones');
   
   for (let i = 1; i < dReg.length; i++) {
     const row = dReg[i];
@@ -317,7 +321,7 @@ async function getTerritoryData(acName) {
       dep:    lDeptoKey,
       ts:     fAsig.getTime(),
       cTxt,
-      pTs:    (aDate > fAsig.getTime()) ? aDate : null,
+      pTs:    (aDate === 1 || aDate > fAsig.getTime()) ? aDate : null,
     });
   }
 
