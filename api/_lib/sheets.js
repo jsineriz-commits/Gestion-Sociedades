@@ -8,13 +8,33 @@ const DB_SHEET_ID = process.env.GOOGLE_SHEET_ID || '1FpgyFCw2hibi3w_jArtohKUXPhv
 
 let _authClient = null;
 
+function formatPrivateKey(key) {
+  if (!key) return '';
+  // Remover comillas al inicio y final si se pegaron por error
+  key = key.trim().replace(/^"|"$/g, '');
+  // Reemplazar literales \n por saltos de línea
+  key = key.replace(/\\n/g, '\n');
+  
+  // Arreglar casos donde la llave se pegó como una sola línea con espacios
+  if (!key.includes('\n')) {
+    let text = key.replace('-----BEGIN PRIVATE KEY-----', '');
+    text = text.replace('-----END PRIVATE KEY-----', '');
+    const cleanBase64 = text.replace(/\s+/g, '');
+    const lines = cleanBase64.match(/.{1,64}/g);
+    if (lines) {
+      key = '-----BEGIN PRIVATE KEY-----\n' + lines.join('\n') + '\n-----END PRIVATE KEY-----\n';
+    }
+  }
+  return key;
+}
+
 async function getAuthClient() {
   if (_authClient) return _authClient;
   
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      private_key: formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
     },
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
