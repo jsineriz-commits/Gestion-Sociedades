@@ -13,14 +13,12 @@ window.initCuentas = async function() {
   renderCuentasLoading();
 
   try {
-    // 1. Traer comentarios del Sheet
     const comments = await fetch('/api/getCuentasComments').then(r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     });
     ALL_COMMENTS = comments;
 
-    // 2. Intentar tomar las razones sociales del TERR_DATA global (ya cargado)
     if (window.TERR_DATA && window.TERR_DATA.acSocieties) {
       for (const s of window.TERR_DATA.acSocieties) {
         if (s.cuit && s.nombre) RAZONES_MAP[String(s.cuit).trim()] = s.nombre;
@@ -48,7 +46,6 @@ function buildCuentasData() {
     if (!map[c.cuit]) map[c.cuit] = { cuit: c.cuit, nombre: RAZONES_MAP[c.cuit] || '', comments: [] };
     map[c.cuit].comments.push({ fecha: c.fecha, comentario: c.comentario });
   }
-  // Ordenar comentarios de más reciente a más antiguo dentro de cada cuenta
   for (const key in map) map[key].comments.reverse();
   CUENTAS_DATA = Object.values(map).sort((a, b) => b.comments.length - a.comments.length);
 }
@@ -104,15 +101,15 @@ function buildCuentaCard(cuenta) {
         </div>`).join('')
     : `<div style="color:var(--text-secondary);font-size:0.85rem;padding:0.5rem 0;">Sin comentarios aún.</div>`;
 
-  const nombreDisplay = cuenta.nombre || `CUIT ${cuenta.cuit}`;
-  const cuitDisplay   = cuenta.nombre ? `CUIT: ${cuenta.cuit}` : '';
+  const nombreDisplay = cuenta.nombre || 'CUIT ' + cuenta.cuit;
+  const cuitDisplay   = cuenta.nombre ? 'CUIT: ' + cuenta.cuit : '';
 
   return `
   <div class="cuenta-card" id="card-${sanitizeId(cuenta.cuit)}">
-    <div class="cuenta-header" onclick="toggleCuenta('${sanitizeId(cuenta.cuit)}')">
+    <div class="cuenta-header" onclick="toggleCuenta('${sanitizeId(cuenta.cuit)}', '${cuenta.cuit}')">
       <div class="cuenta-title-group">
         <span class="cuenta-nombre">${escapeHtml(nombreDisplay)}</span>
-        ${cuitDisplay ? `<span class="cuenta-cuit">${escapeHtml(cuitDisplay)}</span>` : ''}
+        ${cuitDisplay ? '<span class="cuenta-cuit">' + escapeHtml(cuitDisplay) + '</span>' : ''}
       </div>
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <span class="cuenta-badge">${cuenta.comments.length} comentario${cuenta.comments.length !== 1 ? 's' : ''}</span>
@@ -120,9 +117,10 @@ function buildCuentaCard(cuenta) {
       </div>
     </div>
     <div class="cuenta-body" id="body-${sanitizeId(cuenta.cuit)}">
+      <div id="info-${sanitizeId(cuenta.cuit)}" style="padding:1rem 1.5rem 0;"></div>
       <div class="comment-timeline">${commentsHtml}</div>
       <div class="add-comment-form">
-        <textarea 
+        <textarea
           id="textarea-${sanitizeId(cuenta.cuit)}"
           placeholder="Escribí un comentario sobre esta cuenta..."
           rows="2"
@@ -136,17 +134,129 @@ function buildCuentaCard(cuenta) {
   </div>`;
 }
 
-// ─── Toggle expand/collapse ────────────────────────────────────────────────
-window.toggleCuenta = function(safeId) {
+// ─── Toggle expand/collapse + carga info enriquecida ──────────────────────
+const INFO_LOADED = new Set();
+
+window.toggleCuenta = function(safeId, cuit) {
   const body    = document.getElementById('body-' + safeId);
   const chevron = document.getElementById('chevron-' + safeId);
   if (!body) return;
   const isOpen = body.classList.contains('open');
   body.classList.toggle('open', !isOpen);
   if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+  // Cargar info enriquecida la primera vez que se abre
+  if (!isOpen && cuit && !INFO_LOADED.has(safeId)) {
+    INFO_LOADED.add(safeId);
+    loadCuentaInfo(cuit, safeId);
+  }
 };
 
-// ─── Guardar comentario ────────────────────────────────────────────────────
+// ─── Cargar contexto enriquecido desde Metabase ────────────────────────────
+async function loadCuentaInfo(cuit, safeId) {
+  const panel = document.getElementById('info-' + safeId);
+  if (!panel) return;
+  panel.innerHTML = '<div style="color:var(--text-secondary);font-size:0.78rem;padding:0.5rem 0;">Cargando datos de la cuenta...</div>';
+  try {
+    const r    = await fetch('/api/getCuentaInfo?cuit=' + encodeURIComponent(cuit));
+    const info = await r.json();
+    if (!r.ok || !info.found) {
+      panel.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem;padding:0.5rem 0;border-bottom:1px solid var(--border-color);margin-bottom:0.75rem;">Sin datos en Base Clave para este CUIT</div>';
+      return;
+    }
+    panel.innerHTML = renderCuentaInfoPanel(info);
+    if (window.lucide) lucide.createIcons();
+  } catch(e) {
+    panel.innerHTML = '';
+  }
+}
+
+// ─── Helpers de formato ────────────────────────────────────────────────────
+function fmt(v, suffix) {
+  suffix = suffix || '';
+  if (v === null || v === undefined || v === '') return '—';
+  const n = parseFloat(v);
+  if (!isNaN(n)) return n.toLocaleString('es-AR') + suffix;
+  return String(v);
+}
+function pill(txt, color) {
+  return '<span style="background:' + color + '22;color:' + color + ';padding:0.15rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:700;">' + txt + '</span>';
+}
+function kpiBox(label, value, color) {
+  return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:0.5rem 0.75rem;">' +
+    '<div style="font-size:1rem;font-weight:700;color:' + color + ';">' + value + '</div>' +
+    '<div style="font-size:0.62rem;color:var(--text-secondary);margin-top:2px;">' + label + '</div>' +
+  '</div>';
+}
+function fechaBox(label, value) {
+  if (!value) return '';
+  return '<div style="font-size:0.72rem;color:var(--text-secondary);">' + label + ': <b style="color:var(--text-primary);">' + escapeHtml(String(value)) + '</b></div>';
+}
+
+// ─── Render del panel de info enriquecida ──────────────────────────────────
+function renderCuentaInfoPanel(info) {
+  const dcacPill = info.enDcac
+    ? pill('EN dCaC', '#22c55e')
+    : pill('SIN CUENTA dCaC', '#6b7280');
+
+  const contactoHtml = info.contacto
+    ? '<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:0.4rem;">' +
+        (info.contacto.nombre ? '👤 ' + escapeHtml(info.contacto.nombre) : '') +
+        (info.contacto.telefono ? '&nbsp;&nbsp;📞 ' + escapeHtml(info.contacto.telefono) : '') +
+        (info.contacto.mail    ? '&nbsp;&nbsp;✉ ' + escapeHtml(info.contacto.mail)    : '') +
+      '</div>'
+    : '';
+
+  const acPill        = info.ac          ? pill(escapeHtml(info.ac), '#3b82f6')         : '';
+  const reprPill      = info.representante ? pill(escapeHtml(info.representante), '#8b5cf6') : '';
+  const estHtml       = info.estPrincipal
+    ? '<span style="font-size:0.72rem;color:var(--text-secondary);">📍 ' + escapeHtml(info.estPrincipal) + '</span>'
+    : '';
+
+  const razonSecHtml  = (info.razonSocial && info.razonSocial !== info.nombre)
+    ? '<div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;">🏢 ' + escapeHtml(info.razonSocial) + '</div>'
+    : '';
+
+  const kpisHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:0.5rem;margin-top:0.75rem;">' +
+    kpiBox('Kt Total',      fmt(info.kt),             '#f59e0b') +
+    kpiBox('Kv Total',      fmt(info.kv),             '#22c55e') +
+    kpiBox('Kop dCaC',      fmt(info.cabezasOperadas),'#3b82f6') +
+    kpiBox('Sug. Faena',    fmt(info.sugeridoFae),    '#f97316') +
+    kpiBox('Sug. Invernada',fmt(info.sugeridoInv),    '#8b5cf6') +
+    kpiBox('Op. Totales',   fmt(info.qOpTotal),       '#ec4899') +
+  '</div>';
+
+  const fechasHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.4rem;margin-top:0.75rem;">' +
+    fechaBox('FUC',           info.FUC) +
+    fechaBox('FUV',           info.FUV) +
+    fechaBox('Últ. Op.',      info.ultOp) +
+    fechaBox('Últ. Act.',     info.ultAct) +
+    fechaBox('Últ. Ingreso',  info.ultimoIngreso) +
+    fechaBox('Últ. No Conc.', info.ultNoConc) +
+  '</div>';
+
+  const opsDetalle = (info.qComprasFae || info.qVentasFae || info.qComprasInv || info.qVentasInv)
+    ? '<div style="margin-top:0.75rem;font-size:0.72rem;color:var(--text-secondary);display:flex;flex-wrap:wrap;gap:0.75rem;">' +
+        '<span>Compras Fae: <b style="color:var(--text-primary);">' + fmt(info.qComprasFae) + '</b></span>' +
+        '<span>Ventas Fae: <b style="color:var(--text-primary);">' + fmt(info.qVentasFae) + '</b></span>' +
+        '<span>Compras Inv: <b style="color:var(--text-primary);">' + fmt(info.qComprasInv) + '</b></span>' +
+        '<span>Ventas Inv: <b style="color:var(--text-primary);">' + fmt(info.qVentasInv) + '</b></span>' +
+        (info.concGral !== null ? '<span>Conc. %: <b style="color:#22c55e;">' + fmt(info.concGral) + '%</b></span>' : '') +
+      '</div>'
+    : '';
+
+  return '<div style="border-bottom:1px solid var(--border-color);padding-bottom:1rem;margin-bottom:0.75rem;">' +
+    '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;">' +
+      dcacPill + '&nbsp;' + acPill + (reprPill ? '&nbsp;' + reprPill : '') + '&nbsp;' + estHtml +
+    '</div>' +
+    razonSecHtml +
+    contactoHtml +
+    kpisHtml +
+    fechasHtml +
+    opsDetalle +
+  '</div>';
+}
+
+// ─── Guardar comentario en card existente ──────────────────────────────────
 window.saveComment = async function(cuit, safeId) {
   const textarea = document.getElementById('textarea-' + safeId);
   if (!textarea) return;
@@ -167,34 +277,31 @@ window.saveComment = async function(cuit, safeId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
-    // Agregar el nuevo comentario localmente al objeto de datos
     const cuenta = CUENTAS_DATA.find(c => c.cuit === cuit);
     if (cuenta) {
       cuenta.comments.unshift({ fecha: data.fecha, comentario: texto });
     } else {
-      // Es una cuenta nueva (sin comentarios previos)
       CUENTAS_DATA.unshift({ cuit, nombre: RAZONES_MAP[cuit] || '', comments: [{ fecha: data.fecha, comentario: texto }] });
     }
     ALL_COMMENTS.push({ cuit, fecha: data.fecha, comentario: texto });
 
     textarea.value = '';
-    // Re-render solo esta card
+    // Re-render solo la card
     const card = document.getElementById('card-' + safeId);
     const cuentaData = CUENTAS_DATA.find(c => c.cuit === cuit);
     if (card && cuentaData) {
-      const newCardHtml = buildCuentaCard(cuentaData);
-      card.outerHTML = newCardHtml;
-      // Reabrir el body
-      const newBody = document.getElementById('body-' + safeId);
+      card.outerHTML = buildCuentaCard(cuentaData);
+      const newBody    = document.getElementById('body-' + safeId);
       const newChevron = document.getElementById('chevron-' + safeId);
-      if (newBody) newBody.classList.add('open');
+      if (newBody)    newBody.classList.add('open');
       if (newChevron) newChevron.style.transform = 'rotate(180deg)';
+      // Recargar info enriquecida (borrar del set para que se vuelva a pedir)
+      INFO_LOADED.delete(safeId);
+      loadCuentaInfo(cuit, safeId);
       if (window.lucide) lucide.createIcons();
     }
-
-    // Actualizar badge
     const badge = document.getElementById('cuentas-count-badge');
-    if (badge) badge.textContent = `${CUENTAS_DATA.length} cuentas`;
+    if (badge) badge.textContent = CUENTAS_DATA.length + ' cuentas';
 
   } catch (err) {
     alert('Error al guardar: ' + err.message);
@@ -234,18 +341,18 @@ window.saveNewCuentaComment = async function() {
   const btn          = document.querySelector('#new-cuenta-form .btn-save-comment');
   if (!cuitInput || !commentInput) return;
 
-  const cuit      = cuitInput.value.trim();
+  const cuit       = cuitInput.value.trim();
   const comentario = commentInput.value.trim();
 
-  if (!cuit)       { cuitInput.focus();    cuitInput.style.borderColor = 'var(--danger)'; return; }
-  if (!comentario) { commentInput.focus(); commentInput.style.borderColor = 'var(--danger)'; return; }
+  if (!cuit)       { cuitInput.focus();    cuitInput.style.borderColor = 'red'; return; }
+  if (!comentario) { commentInput.focus(); commentInput.style.borderColor = 'red'; return; }
 
   cuitInput.style.borderColor    = '';
   commentInput.style.borderColor = '';
 
   if (btn) {
-    btn.disabled   = true;
-    btn.innerHTML  = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Guardando...';
+    btn.disabled  = true;
+    btn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Guardando...';
     if (window.lucide) lucide.createIcons();
   }
 
@@ -258,35 +365,27 @@ window.saveNewCuentaComment = async function() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
-    // Actualizar estado local
     const existing = CUENTAS_DATA.find(c => c.cuit === cuit);
     if (existing) {
       existing.comments.unshift({ fecha: data.fecha, comentario });
     } else {
-      CUENTAS_DATA.unshift({
-        cuit,
-        nombre: RAZONES_MAP[cuit] || '',
-        comments: [{ fecha: data.fecha, comentario }]
-      });
+      CUENTAS_DATA.unshift({ cuit, nombre: RAZONES_MAP[cuit] || '', comments: [{ fecha: data.fecha, comentario }] });
     }
     ALL_COMMENTS.push({ cuit, fecha: data.fecha, comentario });
 
-    // Limpiar form y cerrar
     cuitInput.value    = '';
     commentInput.value = '';
     window.hideNewCuentaForm();
-
-    // Re-render lista y buscar la cuenta recién guardada
     renderCuentasList(CUENTAS_DATA);
 
-    // Expandir la card de la cuenta que se acaba de comentar
     const safeId = sanitizeId(cuit);
     const body   = document.getElementById('body-' + safeId);
     const chev   = document.getElementById('chevron-' + safeId);
-    if (body)  body.classList.add('open');
-    if (chev)  chev.style.transform = 'rotate(180deg)';
+    if (body) body.classList.add('open');
+    if (chev) chev.style.transform = 'rotate(180deg)';
+    // Cargar info enriquecida inmediatamente
+    loadCuentaInfo(cuit, safeId);
 
-    // Si estaba filtrando, limpiar el filtro para ver la cuenta
     const searchInput = document.getElementById('cuentas-search-input');
     if (searchInput) searchInput.value = '';
 
