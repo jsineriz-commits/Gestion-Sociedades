@@ -211,3 +211,92 @@ function escapeHtml(str) {
 function sanitizeId(str) {
   return String(str || '').replace(/[^a-zA-Z0-9]/g, '_');
 }
+
+// ─── Nueva Cuenta / Comentario desde form superior ─────────────────────────
+window.showNewCuentaForm = function() {
+  const form = document.getElementById('new-cuenta-form');
+  if (form) {
+    form.style.display = 'block';
+    const inp = document.getElementById('new-cuit-input');
+    if (inp) inp.focus();
+    if (window.lucide) lucide.createIcons();
+  }
+};
+
+window.hideNewCuentaForm = function() {
+  const form = document.getElementById('new-cuenta-form');
+  if (form) form.style.display = 'none';
+};
+
+window.saveNewCuentaComment = async function() {
+  const cuitInput    = document.getElementById('new-cuit-input');
+  const commentInput = document.getElementById('new-comment-input');
+  const btn          = document.querySelector('#new-cuenta-form .btn-save-comment');
+  if (!cuitInput || !commentInput) return;
+
+  const cuit      = cuitInput.value.trim();
+  const comentario = commentInput.value.trim();
+
+  if (!cuit)       { cuitInput.focus();    cuitInput.style.borderColor = 'var(--danger)'; return; }
+  if (!comentario) { commentInput.focus(); commentInput.style.borderColor = 'var(--danger)'; return; }
+
+  cuitInput.style.borderColor    = '';
+  commentInput.style.borderColor = '';
+
+  if (btn) {
+    btn.disabled   = true;
+    btn.innerHTML  = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Guardando...';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  try {
+    const res  = await fetch('/api/addCuentaComment', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ cuit, comentario }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al guardar');
+
+    // Actualizar estado local
+    const existing = CUENTAS_DATA.find(c => c.cuit === cuit);
+    if (existing) {
+      existing.comments.unshift({ fecha: data.fecha, comentario });
+    } else {
+      CUENTAS_DATA.unshift({
+        cuit,
+        nombre: RAZONES_MAP[cuit] || '',
+        comments: [{ fecha: data.fecha, comentario }]
+      });
+    }
+    ALL_COMMENTS.push({ cuit, fecha: data.fecha, comentario });
+
+    // Limpiar form y cerrar
+    cuitInput.value    = '';
+    commentInput.value = '';
+    window.hideNewCuentaForm();
+
+    // Re-render lista y buscar la cuenta recién guardada
+    renderCuentasList(CUENTAS_DATA);
+
+    // Expandir la card de la cuenta que se acaba de comentar
+    const safeId = sanitizeId(cuit);
+    const body   = document.getElementById('body-' + safeId);
+    const chev   = document.getElementById('chevron-' + safeId);
+    if (body)  body.classList.add('open');
+    if (chev)  chev.style.transform = 'rotate(180deg)';
+
+    // Si estaba filtrando, limpiar el filtro para ver la cuenta
+    const searchInput = document.getElementById('cuentas-search-input');
+    if (searchInput) searchInput.value = '';
+
+  } catch (err) {
+    alert('Error al guardar: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled  = false;
+      btn.innerHTML = '<i data-lucide="send" style="width:14px;height:14px;"></i> Guardar Comentario';
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+};
