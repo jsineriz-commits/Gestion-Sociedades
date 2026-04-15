@@ -67,13 +67,21 @@ async function getACs() {
       const nombre = String(g(data[i], 14)).trim();
       if (nombre) acSet.add(nombre);
     }
+    if (acSet.size > 0) return Array.from(acSet).sort();
+    throw new Error('Sheet aux vacío o sin ACs en col 14');
   } catch (err) {
-    console.warn('[getACs] Fallback to Metabase Query 190 due to missing Sheets auth.');
-    const mb = require('./metabase');
-    const q190 = await mb.fetchMetabaseQuery(190);
-    for (const r of q190) {
-      const nombreAc = `${r.nombre || ''} ${r.apellido || ''}`.trim();
-      if (nombreAc) acSet.add(nombreAc);
+    console.warn('[getACs] Fallback: extrayendo ACs de Metabase Q189 campo asociado_comercial.');
+    try {
+      const mb   = require('./metabase');
+      const q189 = await mb.fetchMetabaseQuery(189);
+      for (const r of q189) {
+        const ac = String(r.asociado_comercial || '').trim();
+        if (ac && ac !== 'null') acSet.add(ac);
+      }
+    } catch (mbErr) {
+      console.error('[getACs] Error en fallback Metabase Q189:', mbErr.message);
+      // Devolver array vacío en lugar de explotar con 500
+      return [];
     }
   }
   return Array.from(acSet).sort();

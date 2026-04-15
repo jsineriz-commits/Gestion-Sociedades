@@ -27,16 +27,12 @@ app.listen(3000, () => {
   console.log('✅ Local Server running on http://localhost:3000/');
   // Precalentar el caché de Metabase en segundo plano para que el primer request del browser sea rápido
   const { fetchMetabaseQuery } = require('./api/_lib/metabase');
-  console.log('[warmup] Precargando Query 188 de Metabase (~147MB)...');
+  console.log('[warmup] Precargando Q188 + Q189 de Metabase...');
   fetchMetabaseQuery(188)
     .then(() => {
       console.log('[warmup] Q188 en caché ✓');
       return fetchMetabaseQuery(189);
     })
-    .then(() => {
-      console.log('[warmup] Q189 en caché ✓');
-      return fetchMetabaseQuery(190);
-    })
-    .then(() => console.log('[warmup] ✅ Todas las queries precargadas. El dashboard cargará al instante.'))
+    .then(() => console.log('[warmup] ✅ Q188 + Q189 precargadas. El dashboard cargará al instante.'))
     .catch(e => console.error('[warmup] Error precargando:', e.message));
 });
