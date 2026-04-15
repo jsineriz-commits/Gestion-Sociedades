@@ -54,7 +54,7 @@ h1, h2, h3, h4 {
 /* Layout */
 .app-container {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 1fr;
   min-height: 100vh;
 }
 
@@ -412,7 +412,7 @@ h1, h2, h3, h4 {
 
 @media (max-width: 1024px) {
   .app-container {
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: 1fr;
   }
   .sidebar {
     padding: 2rem 0.75rem;

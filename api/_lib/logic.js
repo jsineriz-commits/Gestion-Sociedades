@@ -60,11 +60,21 @@ function normSrv(s) {
 // ─── getACs ────────────────────────────────────────────────────────────────────
 
 async function getACs() {
-  const data = await getSheetData('aux');
-  const acSet = new Set();
-  for (let i = 1; i < data.length; i++) {
-    const nombre = String(g(data[i], 14)).trim();
-    if (nombre) acSet.add(nombre);
+  let acSet = new Set();
+  try {
+    const data = await getSheetData('aux');
+    for (let i = 1; i < data.length; i++) {
+      const nombre = String(g(data[i], 14)).trim();
+      if (nombre) acSet.add(nombre);
+    }
+  } catch (err) {
+    console.warn('[getACs] Fallback to Metabase Query 190 due to missing Sheets auth.');
+    const mb = require('./metabase');
+    const q190 = await mb.fetchMetabaseQuery(190);
+    for (const r of q190) {
+      const nombreAc = `${r.nombre || ''} ${r.apellido || ''}`.trim();
+      if (nombreAc) acSet.add(nombreAc);
+    }
   }
   return Array.from(acSet).sort();
 }
@@ -270,53 +280,90 @@ async function buildGlobalMaps() {
 // Equivale a getTerritoryData() del .gs original.
 // Datos territoriales: lee Leads en vivo, todo lo demás del caché.
 
+const { processMetabaseMapData } = require('./metabase');
+
 async function getTerritoryData(acName) {
   const isAdmin = (!acName || acName === '* TODOS *');
 
-  const gMaps = await buildGlobalMaps();
-  const { emailToNameMap, acIdToNameMap, admGlobalMap, commentsSet, allByDepto, bcRaw } = gMaps;
+  // 1. Obtener la data geográfica estructurada directamente de Metabase (Map Polygons)
+  const mbResult = await processMetabaseMapData(acName, isAdmin);
 
-  // ── Leer LEADS en vivo ────────────────────────────────────────────────────────
-  const dLeads = await getSheetData('Leads');
-  const crmSet        = {};
-  const cuitToEmailMap = {};
-  const acLeadsRaw    = [];
+  // 2. Extraer dependencias de Sheets no-disponibles en Metabase (Asignaciones temporales y Regiones)
+  let dLeads = [], dCom = [], dReg = [];
+  try {
+    [dLeads, dCom, dReg] = await Promise.all([
+      getSheetData('Leads'),
+      getSheetData('Comentarios'),
+      getSheetData('Roster-Regiones')
+    ]);
+  } catch (err) {
+    console.error("No se pudo cargar Sheets (faltan credenciales locales). Fallback a datos vacíos.", err.message);
+  }
 
-  // Pasada 1: crmSet + cuitToEmailMap
-  for (let i = 1; i < dLeads.length; i++) {
-    const row   = dLeads[i];
-    const cuit  = String(g(row, 11)).trim();
-    const email = String(g(row, 2)).trim().toLowerCase();
-    if (cuit && email) {
-      cuitToEmailMap[cuit] = email;
-      const leadNm = emailToNameMap[email] || '';
-      if (isAdmin || leadNm === acName) crmSet[cuit] = true;
+  // --> COMENTARIOS
+  const commentsSet = {};
+  for (let i = 1; i < dCom.length; i++) {
+    const row   = dCom[i];
+    const idA   = String(g(row, 0)).trim();
+    const idB   = String(g(row, 1)).trim();
+    const txtCom = String(g(row, 5) || '').trim() || 'Comentario registrado';
+    if (idA.length > 2) commentsSet[idA] = txtCom;
+    if (idB.length > 2) commentsSet[idB] = txtCom;
+  }
+
+  // --> REGIONES (Map Toggles)
+  const regionMap = {};
+  const deptoToRegion = {};
+  const provMapBackend = {
+    'BUENOS AIRES':'BA','CORRIENTES':'COR','CORDOBA':'CBA','ENTRE RIOS':'ER',
+    'FORMOSA':'FOR','LA PAMPA':'LPA','SANTIAGO DEL ESTERO':'SDE','SALTA':'SAL',
+    'CHUBUT':'CHU','LA RIOJA':'LRJ','CHACO':'CHA','RIO NEGRO':'RN','SAN LUIS':'SLU',
+    'MENDOZA':'MZA','NEUQUEN':'NQN','SANTA FE':'SFE','TUCUMAN':'TUC','JUJUY':'JUJ',
+    'CATAMARCA':'CAT','MISIONES':'MIS','SAN JUAN':'SJU','TIERRA DEL FUEGO':'TDF',
+    'CIUDAD AUTONOMA DE BUENOS AIRES':'CABA','CIUDAD DE BUENOS AIRES':'CABA','MDZ':'MZA'
+  };
+
+  for (let i = 1; i < dReg.length; i++) {
+    const row = dReg[i];
+    const rName = String(g(row, 7)).trim();
+    const rResp = String(g(row, 11)).trim();
+    if (rName) regionMap[rName] = rResp || 'Sin asignar';
+    
+    const provRaw = String(g(row, 0)).trim().toUpperCase();
+    const deptoRaw = normSrv(g(row, 1));
+    const regNameL = String(g(row, 3)).trim();
+    if (deptoRaw && regNameL) {
+      const provK = provMapBackend[provRaw] || '';
+      deptoToRegion[deptoRaw + (provK ? '|' + provK : '')] = regNameL;
     }
   }
 
-  // Pasada 2: acLeadsRaw (detalle para el panel de zona)
+  // --> LEADS RAW (Ranking de Efectividad AC)
+  const acLeadsRaw = [];
   for (let i = 1; i < dLeads.length; i++) {
     const row        = dLeads[i];
     const lId        = String(g(row, 0)).trim();
     const fAsig      = serialToDate(g(row, 1));
-    const lEmail     = String(g(row, 2)).trim().toLowerCase();
     const lCuit      = String(g(row, 11)).trim();
     const lProv      = String(g(row, 15)).trim().toUpperCase();
     const lDepto     = normSrv(g(row, 16));
+    const lAcNom     = String(g(row, 5) || g(row, 2) || '').trim(); // Fallback name
+    const lNombreSoc = String(g(row, 12)).trim() || String(g(row, 10)).trim();
 
-    if (!fAsig || !lEmail) continue;
+    if (!fAsig) continue;
 
     const lDeptoKey  = (lDepto || 'SIN UBICACION') + (lProv ? '|' + lProv : '');
-    const lAcNom     = emailToNameMap[lEmail] || '';
-    const lNombreSoc = String(g(row, 12)).trim() || String(g(row, 10)).trim();
     const cTxt       = commentsSet[lId] || null;
-    const aObj       = admGlobalMap[lCuit] || { actDate: 0, nom: '' };
-    const aDate      = aObj.actDate || 0;
+
+    // TODO: Connect this with `mbResult` metadata to get actual posterior activity
+    // since we deprecated admGlobalMap
+    // pTs: ...
+    const aDate = 0; // Temp placeholder instead of breaking since Metabase takes priority
 
     acLeadsRaw.push({
       ac:     lAcNom,
       nom:    lNombreSoc,
-      nomMet: aObj.nom || '',
+      nomMet: '',
       cuit:   lCuit,
       dep:    lDeptoKey,
       ts:     fAsig.getTime(),
@@ -325,97 +372,11 @@ async function getTerritoryData(acName) {
     });
   }
 
-  // ── admSet ────────────────────────────────────────────────────────────────────
-  const admSet = {};
-  for (const c in admGlobalMap) {
-    const acNomMeta = admGlobalMap[c].acNom || '';
-    if (acNomMeta && (isAdmin || acNomMeta === acName)) admSet[c] = true;
-  }
+  mbResult.acLeadsRaw = acLeadsRaw;
+  mbResult.regionMap = regionMap;
+  mbResult.deptoToRegion = deptoToRegion;
 
-  // ── acSocieties, acByDepto, liveDeptoAcMap, acAdmByDepto ────────────────────
-  const acSocieties   = [];
-  const acByDepto     = {};
-  const liveDeptoAcMap = {};
-  const acAdmByDepto  = {};
-  const bcSet         = {};
-
-  // Mapa rápido CUIT → fila BC
-  const bcCuitMap = {};
-  for (const r of bcRaw) {
-    if (r.c) bcCuitMap[r.c] = r;
-    if (!liveDeptoAcMap[r.d]) liveDeptoAcMap[r.d] = {};
-    const rAcNom = emailToNameMap[cuitToEmailMap[r.c]] || r.an || acIdToNameMap[r.a] || r.a || 'SIN ASIGNAR';
-    liveDeptoAcMap[r.d][rAcNom] = (liveDeptoAcMap[r.d][rAcNom] || 0) + 1;
-  }
-
-  for (const cuit in admSet) {
-    if (!cuit) continue;
-    const rowBc  = bcCuitMap[cuit];
-    const metaObj = admGlobalMap[cuit] || { nom: 'Sociedad sin nombre' };
-
-    const soc = {
-      nombre: metaObj.nom || (rowBc ? rowBc.n : 'Sin nombre (Cuit: ' + cuit + ')'),
-      cuit,
-      depto:  rowBc ? rowBc.d.split('|')[0]      : '-',
-      prov:   rowBc ? (rowBc.d.split('|')[1] || '') : '',
-      qtotal: rowBc ? rowBc.qt : 0,
-      qvaca:  rowBc ? rowBc.qv : 0,
-      inBc:   !!rowBc,
-      inAdm:  true,
-    };
-    acSocieties.push(soc);
-
-    if (rowBc) {
-      bcSet[cuit] = true;
-      const dKey = rowBc.d;
-      if (!acByDepto[dKey])    acByDepto[dKey]    = { soc: 0, qtotal: 0, qvaca: 0 };
-      if (!acAdmByDepto[dKey]) acAdmByDepto[dKey] = { soc: 0 };
-      acByDepto[dKey].soc++;
-      acByDepto[dKey].qtotal += rowBc.qt;
-      acByDepto[dKey].qvaca  += rowBc.qv;
-      acAdmByDepto[dKey].soc++;
-    }
-  }
-
-  // ── Venn ──────────────────────────────────────────────────────────────────────
-  const stats = { onlyBc: 0, onlyCrm: 0, onlyAdm: 0, bcAdm: 0, bcCrm: 0, crmAdm: 0, all3: 0, totBc: 0, totCrm: 0, totAdm: 0 };
-  const allCuits = {};
-  for (const c in crmSet) allCuits[c] = true;
-  for (const c in admSet)  allCuits[c] = true;
-  for (const c in bcSet)   allCuits[c] = true;
-
-  for (const c in allCuits) {
-    if (!c) continue;
-    const inBc  = !!bcSet[c];
-    const inCrm = !!crmSet[c];
-    const inAdm = !!admSet[c];
-    if (inBc)  stats.totBc++;
-    if (inCrm) stats.totCrm++;
-    if (inAdm) stats.totAdm++;
-    if      (inBc  && !inCrm && !inAdm) stats.onlyBc++;
-    else if (!inBc &&  inCrm && !inAdm) stats.onlyCrm++;
-    else if (!inBc && !inCrm &&  inAdm) stats.onlyAdm++;
-    else if (inBc  &&  inAdm && !inCrm) stats.bcAdm++;
-    else if (inBc  &&  inCrm && !inAdm) stats.bcCrm++;
-    else if (!inBc &&  inCrm &&  inAdm) stats.crmAdm++;
-    else if (inBc  &&  inCrm &&  inAdm) stats.all3++;
-  }
-
-  let totalSoc = 0;
-  for (const k in allByDepto) totalSoc += allByDepto[k].soc;
-
-  return {
-    acSocieties,
-    acByDepto,
-    allByDepto,
-    totalBcNueva:  { soc: totalSoc },
-    vennStats:     stats,
-    acLeadsRaw,
-    deptoAcMap:    liveDeptoAcMap,
-    acAdmByDepto,
-    regionMap:     gMaps.regionMap || {},
-    deptoToRegion: gMaps.deptoToRegion || {}
-  };
+  return mbResult;
 }
 
 // ─── getDashboardData ──────────────────────────────────────────────────────────
