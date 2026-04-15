@@ -1,20 +1,35 @@
 {
-  "name": "gestion-sociedades-vercel",
-  "version": "1.0.0",
-  "engines": {
-    "node": "24.x"
-  },
+  "name": "mi-tablero-ganadero",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "googleapis": "^140.0.0"
+    "@types/leaflet": "^1.9.21",
+    "@vercel/blob": "^2.3.1",
+    "googleapis": "144.0.0",
+    "leaflet": "^1.9.4",
+    "lodash.memoize": "^4.1.2",
+    "next": "16.1.6",
+    "next-auth": "^4.24.13",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^3.8.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "@tailwindcss/postcss": "^4",
+    "@types/lodash.memoize": "^4.1.9",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }

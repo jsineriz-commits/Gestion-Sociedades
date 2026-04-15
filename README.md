@@ -1,78 +1,36 @@
-# Territorio AC — Migración Apps Script → Vercel
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Estructura del proyecto
+## Getting Started
 
-```
-/
-├── api/
-│   ├── _lib/
-│   │   ├── sheets.js          ← Auth Google Sheets API + helper de acceso
-│   │   ├── cache.js           ← Cache en memoria (reemplaza CacheService)
-│   │   └── logic.js           ← Toda la lógica de negocio
-│   ├── getACs.js              ← GET /api/getACs
-│   ├── getTerritoryData.js    ← GET /api/getTerritoryData?ac=...
-│   ├── getDashboardData.js    ← GET /api/getDashboardData?email=...&ac=...
-│   ├── invalidateCache.js     ← POST /api/invalidateCache
-│   └── getDeptoGeoJSON.js     ← GET /api/getDeptoGeoJSON
-├── public/
-│   └── index.html             ← Frontend (sin cambios visuales)
-├── package.json
-├── vercel.json
-└── .env.example
-```
-
-## Setup
-
-### 1. Service Account de Google
-
-1. Ir a [Google Cloud Console](https://console.cloud.google.com/)
-2. Crear un proyecto (o usar uno existente)
-3. Activar la **Google Sheets API**
-4. Crear una **Service Account** en IAM → Service Accounts
-5. Generar una clave JSON para esa service account
-6. **Compartir la Google Sheet** con el email de la service account (solo lectura)
-
-### 2. Variables de entorno en Vercel
-
-En Vercel Dashboard → tu proyecto → Settings → Environment Variables:
-
-| Variable | Valor |
-|----------|-------|
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | El JSON completo de la clave (en una sola línea) |
-
-### 3. Deploy
+First, run the development server:
 
 ```bash
-# Instalar Vercel CLI
-npm i -g vercel
-
-# Desde la carpeta del proyecto
-vercel
-
-# O conectar el repo en vercel.com y hacer push
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-### 4. Desarrollo local
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-```bash
-npm install
-cp .env.example .env.local
-# Editar .env.local con el JSON real de la service account
-vercel dev
-```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-## Diferencias con Apps Script
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-| Apps Script | Vercel/Node |
-|------------|-------------|
-| `SpreadsheetApp.openById()` | `googleapis` con Service Account |
-| `CacheService` | Cache en memoria (módulo Node) |
-| `Session.getActiveUser()` | Parámetro `email` en query string |
-| `google.script.run` | `fetch('/api/...')` |
-| `UrlFetchApp.fetch()` | `fetch()` nativo (Node 18) |
+## Learn More
 
-## Notas sobre el caché
+To learn more about Next.js, take a look at the following resources:
 
-El caché en memoria persiste entre invocaciones "calientes" de la misma instancia Vercel.
-En cold starts se regenera automáticamente. Para producción con mucho tráfico,
-considerar reemplazar `api/_lib/cache.js` con [Upstash Redis](https://upstash.com/).
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
