@@ -126,27 +126,22 @@ const PROV_CODE_MAP = {
 };
 
 async function processMetabaseMapData(acName, isAdmin) {
-  // Traer secuencialmente para evitar race conditions en respuestas grandes
+  // Traer Q188 y Q189 (Q190 tiene error SQL en Metabase - se usa Q189.asociado_comercial en su lugar)
   const q188 = await fetchMetabaseQuery(188);
   const q189 = await fetchMetabaseQuery(189);
-  const q190 = await fetchMetabaseQuery(190);
 
-  // Construir mapa de usuarios (ac)
+  // Construir mapa CUIT → AC desde Q189 (campo asociado_comercial)
   const cuitToAcInfo = {};
-  for (const r of q190) {
-    const cuit = String(r.cuit_sociedad || '').trim();
-    if (cuit) {
-      if (!cuitToAcInfo[cuit]) cuitToAcInfo[cuit] = [];
-      const nombreAc = `${r.nombre || ''} ${r.apellido || ''}`.trim();
-      cuitToAcInfo[cuit].push(nombreAc || 'Sin Nombre');
-    }
-  }
-
-  // Mapear q189 extra
   const q189Map = {};
   for (const r of q189) {
-    const c = String(r.cuit_sociedad || r.CUIT || '').trim();
-    if (c) q189Map[c] = r;
+    const cuit = String(r['st.cuit'] || r.cuit || '').trim();
+    if (!cuit) continue;
+    q189Map[cuit] = r;
+    const ac = String(r.asociado_comercial || '').trim();
+    if (ac && ac !== 'null') {
+      if (!cuitToAcInfo[cuit]) cuitToAcInfo[cuit] = [];
+      if (!cuitToAcInfo[cuit].includes(ac)) cuitToAcInfo[cuit].push(ac);
+    }
   }
 
   const acSocieties = [];
