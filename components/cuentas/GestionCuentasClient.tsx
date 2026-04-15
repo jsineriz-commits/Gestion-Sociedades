@@ -1,6 +1,34 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
+// ─── Design tokens (disenio/tokens.json — DeCampoacampo light) ───────────────
+const T = {
+  surfacePage:     '#ededed',
+  surfaceL1:       '#f8f8f8',
+  surfaceL2:       '#ffffff',
+  brand:           '#3179a7',
+  brandHover:      '#2d6e98',
+  brandSubtle:     '#eaf2f6',
+  brandBorder:     '#bfd5e4',
+  contentPrimary:  '#555555',
+  contentSecondary:'#666666',
+  contentTertiary: '#888888',
+  contentDisabled: '#c0c0c0',
+  borderPrimary:   '#a4a4a4',
+  borderSecondary: '#c0c0c0',
+  borderTertiary:  '#ededed',
+  positive:        '#54a22b',
+  positiveSubtle:  '#eef6ea',
+  positiveBorder:  '#cae2bd',
+  negative:        '#e76162',
+  negativeSubtle:  '#fdefef',
+  notice:          '#e45a00',
+  noticeSubtle:    '#fcefe6',
+  noticeBorder:    '#f7ccb0',
+  yellow:          '#b29b0e',
+  yellowSubtle:    '#f7f5e7',
+} as const;
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface Comentario { cuit: string; fecha: string; comentario: string; }
 interface CuentaData { cuit: string; nombre: string; comments: Comentario[]; }
@@ -8,27 +36,19 @@ interface CuentaInfo {
   found: boolean; cuit: string; razonSocial?: string; estPrincipal?: string;
   kt?: number | null; kv?: number | null; cabezasOperadas?: number | null;
   sugeridoFae?: number | null; sugeridoInv?: number | null; qOpTotal?: number | null;
-  FUC?: string; FUV?: string; ultOp?: string; ultAct?: string; ultimoIngreso?: string; ultNoConc?: string;
+  FUC?: string; FUV?: string; ultOp?: string; ultAct?: string; ultimoIngreso?: string;
   qComprasFae?: number | null; qVentasFae?: number | null;
   qComprasInv?: number | null; qVentasInv?: number | null; concGral?: number | null;
-  ac?: string; representante?: string; enDcac?: boolean;
+  ac?: string; enDcac?: boolean;
   contacto?: { nombre: string; telefono: string; mail: string; } | null;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmt(v: number | null | undefined, suffix = '') {
   if (v == null) return '—';
   return v.toLocaleString('es-AR') + suffix;
 }
-function pill(text: string, color: string) {
-  return (
-    <span key={text} style={{ background: color + '22', color, padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700, display: 'inline-block' }}>
-      {text}
-    </span>
-  );
-}
 
-// ─── Panel de info Metabase ───────────────────────────────────────────────────
+// ─── Panel de contexto Metabase ───────────────────────────────────────────────
 function InfoPanel({ cuit }: { cuit: string }) {
   const [info, setInfo] = useState<CuentaInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,60 +60,92 @@ function InfoPanel({ cuit }: { cuit: string }) {
       .finally(() => setLoading(false));
   }, [cuit]);
 
-  if (loading) return <p className="text-xs text-slate-500 py-2">Cargando datos de la cuenta...</p>;
-  if (!info?.found) return <p className="text-xs text-slate-500 py-2 border-b border-slate-800 mb-3">Sin datos en Base Clave para este CUIT</p>;
+  if (loading) return (
+    <div className="flex items-center gap-2 py-3" style={{ borderBottom: `1px solid ${T.borderTertiary}`, marginBottom: 12 }}>
+      <span className="material-symbols-outlined animate-spin text-sm" style={{ color: T.brand }}>progress_activity</span>
+      <span style={{ color: T.contentTertiary, fontSize: 13 }}>Cargando datos de la cuenta…</span>
+    </div>
+  );
+
+  if (!info?.found) return (
+    <p style={{ color: T.contentTertiary, fontSize: 13, borderBottom: `1px solid ${T.borderTertiary}`, paddingBottom: 12, marginBottom: 12 }}>
+      Sin datos en Base Clave para este CUIT.
+    </p>
+  );
 
   return (
-    <div className="border-b border-slate-700 pb-4 mb-3 space-y-3">
-      {/* Badges */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {pill(info.enDcac ? 'EN dCaC' : 'SIN dCaC', info.enDcac ? '#22c55e' : '#6b7280')}
-        {info.ac && pill(info.ac, '#3b82f6')}
-        {info.estPrincipal && (
-          <span className="text-xs text-slate-400">📍 {info.estPrincipal}</span>
+    <div style={{ borderBottom: `1px solid ${T.borderTertiary}`, paddingBottom: 16, marginBottom: 16 }}>
+      {/* Badges funcionales */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <span style={{
+          background: info.enDcac ? T.positiveSubtle : T.surfaceL1,
+          color: info.enDcac ? T.positive : T.contentTertiary,
+          border: `1px solid ${info.enDcac ? T.positiveBorder : T.borderSecondary}`,
+          borderRadius: 6, padding: '2px 10px', fontSize: 12, fontWeight: 600,
+        }}>
+          {info.enDcac ? 'En dCaC' : 'Sin dCaC'}
+        </span>
+        {info.ac && (
+          <span style={{
+            background: T.brandSubtle, color: T.brand,
+            border: `1px solid ${T.brandBorder}`, borderRadius: 6, padding: '2px 10px', fontSize: 12, fontWeight: 600,
+          }}>{info.ac}</span>
         )}
       </div>
-      {info.razonSocial && <p className="text-xs text-slate-400">🏢 {info.razonSocial}</p>}
+
+      {/* Info básica */}
+      {info.razonSocial && (
+        <p className="flex items-center gap-1.5 mb-1" style={{ fontSize: 13, color: T.contentSecondary }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: T.contentTertiary }}>business</span>
+          {info.razonSocial}
+        </p>
+      )}
+      {info.estPrincipal && (
+        <p className="flex items-center gap-1.5 mb-1" style={{ fontSize: 13, color: T.contentSecondary }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: T.contentTertiary }}>location_on</span>
+          {info.estPrincipal}
+        </p>
+      )}
       {info.contacto?.nombre && (
-        <p className="text-xs text-slate-400">
-          👤 {info.contacto.nombre}
-          {info.contacto.telefono && ` · 📞 ${info.contacto.telefono}`}
-          {info.contacto.mail && ` · ✉ ${info.contacto.mail}`}
+        <p className="flex items-center gap-1.5 mb-3" style={{ fontSize: 13, color: T.contentSecondary }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: T.contentTertiary }}>person</span>
+          {info.contacto.nombre}
+          {info.contacto.telefono && ` · ${info.contacto.telefono}`}
         </p>
       )}
 
-      {/* KPIs grid */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
         {[
-          { label: 'Kt Total',      val: fmt(info.kt),             color: '#f59e0b' },
-          { label: 'Kv Total',      val: fmt(info.kv),             color: '#22c55e' },
-          { label: 'Kop dCaC',      val: fmt(info.cabezasOperadas),color: '#3b82f6' },
-          { label: 'Sug. Faena',    val: fmt(info.sugeridoFae),    color: '#f97316' },
-          { label: 'Sug. Inv.',     val: fmt(info.sugeridoInv),    color: '#8b5cf6' },
-          { label: 'Op. Totales',   val: fmt(info.qOpTotal),       color: '#ec4899' },
+          { label: 'Kt',         val: fmt(info.kt),              bg: T.noticeSubtle,   fg: T.notice  },
+          { label: 'Kv',         val: fmt(info.kv),              bg: T.positiveSubtle, fg: T.positive},
+          { label: 'Kop dCaC',   val: fmt(info.cabezasOperadas), bg: T.brandSubtle,    fg: T.brand   },
+          { label: 'Sug. Fae',   val: fmt(info.sugeridoFae),     bg: T.surfaceL1,      fg: T.contentSecondary},
+          { label: 'Sug. Inv',   val: fmt(info.sugeridoInv),     bg: T.surfaceL1,      fg: T.contentSecondary},
+          { label: 'Op. Total',  val: fmt(info.qOpTotal),        bg: T.surfaceL1,      fg: T.contentSecondary},
         ].map(k => (
-          <div key={k.label} className="bg-slate-800 rounded-lg p-2">
-            <div className="text-sm font-bold" style={{ color: k.color }}>{k.val}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5">{k.label}</div>
+          <div key={k.label} className="rounded-lg p-2.5"
+            style={{ background: k.bg, border: `1px solid ${T.borderTertiary}` }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: k.fg }}>{k.val}</div>
+            <div style={{ fontSize: 11, color: T.contentTertiary, marginTop: 2 }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Fechas */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
-        {[['FUC', info.FUC], ['FUV', info.FUV], ['Últ. Op.', info.ultOp], ['Últ. Act.', info.ultAct], ['Ingreso', info.ultimoIngreso], ['No Conc.', info.ultNoConc]].map(([l, v]) => v ? (
-          <div key={l as string}>{l}: <span className="text-slate-300">{v}</span></div>
-        ) : null)}
+      {/* Fechas clave */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5" style={{ fontSize: 12, color: T.contentTertiary }}>
+        {([['FUC', info.FUC], ['FUV', info.FUV], ['Últ. Op.', info.ultOp], ['Últ. Act.', info.ultAct], ['Ingreso', info.ultimoIngreso]] as [string, string | undefined][])
+          .filter(([, v]) => v)
+          .map(([l, v]) => (
+            <div key={l}>{l}: <span style={{ color: T.contentPrimary }}>{v}</span></div>
+          ))}
       </div>
 
-      {/* Ops detalle */}
-      {(info.qComprasFae || info.qVentasFae) && (
-        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-          {info.qComprasFae  != null && <span>C.Fae: <b className="text-slate-300">{fmt(info.qComprasFae)}</b></span>}
-          {info.qVentasFae   != null && <span>V.Fae: <b className="text-slate-300">{fmt(info.qVentasFae)}</b></span>}
-          {info.qComprasInv  != null && <span>C.Inv: <b className="text-slate-300">{fmt(info.qComprasInv)}</b></span>}
-          {info.qVentasInv   != null && <span>V.Inv: <b className="text-slate-300">{fmt(info.qVentasInv)}</b></span>}
-          {info.concGral     != null && <span>Conc: <b className="text-green-400">{fmt(info.concGral)}%</b></span>}
+      {/* Detalle ops */}
+      {(info.concGral != null) && (
+        <div className="flex items-center gap-1.5 mt-2" style={{ fontSize: 12, color: T.contentTertiary }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>percent</span>
+          Concreción gral: <span style={{ fontWeight: 700, color: T.positive }}>{fmt(info.concGral)}%</span>
         </div>
       )}
     </div>
@@ -109,15 +161,14 @@ export default function GestionCuentasClient() {
   const [error,         setError]         = useState<string | null>(null);
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [saving,        setSaving]        = useState<string | null>(null);
+  const [showNewForm,   setShowNewForm]   = useState(false);
   const [newCuit,       setNewCuit]       = useState('');
   const [newComment,    setNewComment]    = useState('');
-  const [showNewForm,   setShowNewForm]   = useState(false);
   const [searchQuery,   setSearchQuery]   = useState('');
   const [savingNew,     setSavingNew]     = useState(false);
-  const [commentInputs, setCommentInputs] = useState<Record<string,string>>({});
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  // Build cuentasData from comments
-  const buildCuentas = useCallback((comments: Comentario[]) => {
+  const buildCuentas = useCallback((comments: Comentario[]): CuentaData[] => {
     const map: Record<string, CuentaData> = {};
     for (const c of comments) {
       if (!c.cuit) continue;
@@ -128,22 +179,18 @@ export default function GestionCuentasClient() {
     return Object.values(map).sort((a, b) => b.comments.length - a.comments.length);
   }, []);
 
-  // Load comments
   useEffect(() => {
-    setLoading(true);
     fetch('/api/cuentas/comments')
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then((data: Comentario[]) => {
         setAllComments(data);
         const cd = buildCuentas(data);
-        setCuentasData(cd);
-        setFiltered(cd);
+        setCuentasData(cd); setFiltered(cd);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [buildCuentas]);
 
-  // Filter
   useEffect(() => {
     const q = searchQuery.toLowerCase().trim();
     setFiltered(!q ? cuentasData : cuentasData.filter(c =>
@@ -151,13 +198,8 @@ export default function GestionCuentasClient() {
     ));
   }, [searchQuery, cuentasData]);
 
-  const toggleExpand = (cuit: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(cuit)) next.delete(cuit); else next.add(cuit);
-      return next;
-    });
-  };
+  const toggleExpand = (cuit: string) =>
+    setExpanded(prev => { const n = new Set(prev); n.has(cuit) ? n.delete(cuit) : n.add(cuit); return n; });
 
   const saveComment = async (cuit: string) => {
     const texto = (commentInputs[cuit] || '').trim();
@@ -170,11 +212,9 @@ export default function GestionCuentasClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const newC: Comentario = { cuit, fecha: data.fecha, comentario: texto };
-      const updated = [newC, ...allComments];
+      const updated = [{ cuit, fecha: data.fecha, comentario: texto }, ...allComments];
       setAllComments(updated);
-      const cd = buildCuentas(updated);
-      setCuentasData(cd);
+      const cd = buildCuentas(updated); setCuentasData(cd);
       setCommentInputs(p => ({ ...p, [cuit]: '' }));
     } catch (e: any) { alert(e.message); }
     finally { setSaving(null); }
@@ -185,156 +225,213 @@ export default function GestionCuentasClient() {
     if (!cuit || !comentario) return;
     setSavingNew(true);
     try {
-      const res = await fetch('/api/cuentas/comments', {
+      const res  = await fetch('/api/cuentas/comments', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cuit, comentario }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const newC: Comentario = { cuit, fecha: data.fecha, comentario };
-      const updated = [newC, ...allComments];
+      const updated = [{ cuit, fecha: data.fecha, comentario }, ...allComments];
       setAllComments(updated);
-      const cd = buildCuentas(updated);
-      setCuentasData(cd); setFiltered(cd);
+      const cd = buildCuentas(updated); setCuentasData(cd); setFiltered(cd);
       setNewCuit(''); setNewComment(''); setShowNewForm(false);
       setExpanded(p => new Set([...p, cuit]));
     } catch (e: any) { alert(e.message); }
     finally { setSavingNew(false); }
   };
 
+  // ─── Input style helper ──────────────────────────────────────────────────
+  const inputStyle: React.CSSProperties = {
+    background: T.surfaceL2, border: `1px solid ${T.borderSecondary}`,
+    borderRadius: 6, padding: '8px 12px', fontSize: 14, color: T.contentPrimary,
+    width: '100%', outline: 'none', fontFamily: 'inherit',
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div style={{ minHeight: '100vh', background: T.surfacePage, color: T.contentPrimary }}>
       {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
+      <header style={{ background: T.surfaceL2, borderBottom: `1px solid ${T.borderTertiary}` }}
+        className="px-6 py-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-bold text-white">Gestión de Cuentas</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Historial de comentarios por CUIT</p>
+            <h1 className="text-lg font-semibold" style={{ color: T.contentPrimary }}>Gestión de Cuentas</h1>
+            <p style={{ color: T.contentTertiary, fontSize: 13, marginTop: 2 }}>Comentarios e historial por cuenta</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Buscador */}
             <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2" style={{ fontSize: 18, color: T.contentTertiary }}>search</span>
               <input
                 type="text"
-                placeholder="🔍 Buscar CUIT o razón social..."
+                placeholder="Buscar CUIT o razón social…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-slate-100 text-sm rounded-lg pl-3 pr-8 py-2 w-72 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                style={{ ...inputStyle, paddingLeft: 36, paddingRight: searchQuery ? 32 : 12, width: 280 }}
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-2 text-slate-500 hover:text-white">✕</button>
+                <button onClick={() => setSearchQuery('')}
+                  style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: T.contentTertiary }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                </button>
               )}
             </div>
+            {/* Botón nueva cuenta */}
             <button
               onClick={() => setShowNewForm(p => !p)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              style={{
+                background: T.brand, color: '#fff', border: 'none',
+                borderRadius: 6, padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = T.brandHover)}
+              onMouseLeave={e => (e.currentTarget.style.background = T.brand)}
             >
-              + Nueva Cuenta
+              + Nueva cuenta
             </button>
           </div>
         </div>
 
         {/* Formulario nueva cuenta */}
         {showNewForm && (
-          <div className="mt-4 bg-slate-800 border border-emerald-700 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-emerald-400">Agregar Comentario a una Cuenta</h3>
-              <button onClick={() => setShowNewForm(false)} className="text-slate-500 hover:text-white">✕</button>
-            </div>
-            <input
-              type="text" placeholder="CUIT (ej: 20-12345678-9)" value={newCuit}
-              onChange={e => setNewCuit(e.target.value)}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-            <textarea
-              placeholder="Escribí el comentario sobre esta cuenta..."
-              value={newComment} onChange={e => setNewComment(e.target.value)}
-              rows={3} className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-            <div className="flex justify-end">
-              <button
-                onClick={saveNewCuenta} disabled={savingNew}
-                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                {savingNew ? 'Guardando...' : '📤 Guardar Comentario'}
+          <div style={{
+            marginTop: 16, background: T.brandSubtle, border: `1px solid ${T.brandBorder}`,
+            borderRadius: 8, padding: 16,
+          }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: T.brand }}>Agregar comentario a una cuenta</h3>
+              <button onClick={() => setShowNewForm(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.contentTertiary }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
+            <div className="space-y-3">
+              <input type="text" placeholder="CUIT (ej: 20-12345678-9)" value={newCuit}
+                onChange={e => setNewCuit(e.target.value)} style={{ ...inputStyle, fontFamily: 'monospace' }} />
+              <textarea placeholder="Escribí el comentario sobre esta cuenta…" value={newComment}
+                onChange={e => setNewComment(e.target.value)} rows={3}
+                style={{ ...inputStyle, resize: 'none' }} />
+              <div className="flex justify-end">
+                <button onClick={saveNewCuenta} disabled={savingNew}
+                  style={{
+                    background: savingNew ? T.contentDisabled : T.brand,
+                    color: '#fff', border: 'none', borderRadius: 6,
+                    padding: '8px 20px', fontSize: 14, fontWeight: 600,
+                    cursor: savingNew ? 'not-allowed' : 'pointer',
+                  }}>
+                  {savingNew ? 'Guardando…' : 'Guardar comentario'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </div>
+      </header>
 
       {/* Lista */}
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-3">
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-2">
         {loading && (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-20 gap-2">
+            <span className="material-symbols-outlined animate-spin" style={{ color: T.brand }}>progress_activity</span>
+            <span style={{ color: T.contentTertiary }}>Cargando cuentas…</span>
           </div>
         )}
-        {error && <p className="text-red-400 text-center py-10">{error}</p>}
+        {error && (
+          <div className="flex items-center gap-2 p-4 rounded-lg"
+            style={{ background: T.negativeSubtle, border: `1px solid ${T.negative}20` }}>
+            <span className="material-symbols-outlined" style={{ color: T.negative }}>error</span>
+            <span style={{ color: T.negative, fontSize: 14 }}>{error}</span>
+          </div>
+        )}
         {!loading && !error && filtered.length === 0 && (
-          <div className="text-center py-20 text-slate-500">
-            <p className="text-4xl mb-3">🔍</p>
-            <p>{searchQuery ? 'Sin resultados para esta búsqueda' : 'Todavía no hay cuentas cargadas'}</p>
+          <div className="text-center py-16">
+            <span className="material-symbols-outlined text-5xl block mb-3" style={{ color: T.contentDisabled }}>
+              {searchQuery ? 'search_off' : 'folder_open'}
+            </span>
+            <p style={{ color: T.contentTertiary }}>
+              {searchQuery ? 'Sin resultados para esta búsqueda' : 'Todavía no hay cuentas cargadas'}
+            </p>
           </div>
         )}
 
         {filtered.map(cuenta => {
           const isOpen = expanded.has(cuenta.cuit);
           return (
-            <div key={cuenta.cuit} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            <div key={cuenta.cuit} className="rounded-xl overflow-hidden"
+              style={{ background: T.surfaceL2, border: `1px solid ${T.borderTertiary}` }}>
               {/* Header de la card */}
               <button
                 onClick={() => toggleExpand(cuenta.cuit)}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-5 py-4 text-left"
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = T.surfaceL1)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
                 <div>
-                  <div className="font-semibold text-white text-sm">{cuenta.nombre || `CUIT ${cuenta.cuit}`}</div>
-                  {cuenta.nombre && <div className="text-xs text-slate-500 font-mono mt-0.5">{cuenta.cuit}</div>}
+                  <div style={{ fontWeight: 600, color: T.contentPrimary, fontSize: 14 }}>
+                    {cuenta.nombre || `CUIT ${cuenta.cuit}`}
+                  </div>
+                  {cuenta.nombre && (
+                    <div style={{ fontSize: 12, color: T.contentTertiary, fontFamily: 'monospace', marginTop: 2 }}>
+                      {cuenta.cuit}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
+                  <span style={{
+                    fontSize: 12, color: T.contentTertiary,
+                    background: T.surfaceL1, border: `1px solid ${T.borderTertiary}`,
+                    borderRadius: 99, padding: '2px 10px',
+                  }}>
                     {cuenta.comments.length} comentario{cuenta.comments.length !== 1 ? 's' : ''}
                   </span>
-                  <span className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                  <span className="material-symbols-outlined"
+                    style={{ fontSize: 18, color: T.contentTertiary, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                    expand_more
+                  </span>
                 </div>
               </button>
 
-              {/* Cuerpo expandible */}
+              {/* Cuerpo */}
               {isOpen && (
-                <div className="border-t border-slate-800 px-5 py-4 space-y-4">
-                  {/* Info Metabase */}
+                <div style={{ borderTop: `1px solid ${T.borderTertiary}`, padding: '16px 20px' }}>
                   <InfoPanel cuit={cuenta.cuit} />
 
-                  {/* Timeline de comentarios */}
-                  <div className="space-y-3">
+                  {/* Timeline */}
+                  <div className="space-y-3 mb-4">
                     {cuenta.comments.map((c, i) => (
                       <div key={i} className="flex gap-3">
                         <div className="flex flex-col items-center pt-1">
-                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                          {i < cuenta.comments.length - 1 && <div className="w-0.5 bg-slate-700 flex-1 mt-1" />}
+                          <div className="w-2 h-2 rounded-full" style={{ background: T.brand, flexShrink: 0 }} />
+                          {i < cuenta.comments.length - 1 && (
+                            <div className="w-px flex-1 mt-1" style={{ background: T.borderTertiary }} />
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0 pb-2">
-                          <p className="text-sm text-slate-200 leading-relaxed">{c.comentario}</p>
-                          <p className="text-xs text-slate-500 mt-1">{c.fecha}</p>
+                        <div className="flex-1 pb-2">
+                          <p style={{ fontSize: 14, color: T.contentPrimary, lineHeight: 1.5 }}>{c.comentario}</p>
+                          <p style={{ fontSize: 12, color: T.contentTertiary, marginTop: 3 }}>{c.fecha}</p>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Form agregar comentario */}
-                  <div className="flex gap-2 pt-2">
+                  {/* Form nuevo comentario */}
+                  <div className="flex gap-2">
                     <textarea
-                      placeholder="Agregar comentario..."
+                      placeholder="Agregar comentario…"
                       value={commentInputs[cuenta.cuit] || ''}
                       onChange={e => setCommentInputs(p => ({ ...p, [cuenta.cuit]: e.target.value }))}
                       rows={2}
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-100"
+                      style={{ ...inputStyle, resize: 'none', flex: 1, background: T.surfaceL1 }}
                     />
                     <button
                       onClick={() => saveComment(cuenta.cuit)}
                       disabled={saving === cuenta.cuit}
-                      className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm px-3 py-2 rounded-lg transition-colors self-end"
+                      style={{
+                        background: saving === cuenta.cuit ? T.contentDisabled : T.brand,
+                        color: '#fff', border: 'none', borderRadius: 6,
+                        padding: '8px 14px', cursor: saving === cuenta.cuit ? 'not-allowed' : 'pointer',
+                        alignSelf: 'flex-end',
+                      }}
                     >
-                      {saving === cuenta.cuit ? '...' : '📤'}
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
                     </button>
                   </div>
                 </div>
@@ -342,7 +439,7 @@ export default function GestionCuentasClient() {
             </div>
           );
         })}
-      </div>
+      </main>
     </div>
   );
 }

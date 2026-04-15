@@ -38,6 +38,10 @@ export const metadata: Metadata = {
     icon: "/icon-192x192.png",
     apple: "/apple-icon.png",
   },
+  other: {
+    // Material Symbols Outlined — iconografía de deCampoacampo (disenio/tokens.json)
+    "material-symbols": "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0",
+  },
 };
 
 import Providers from "./providers";
