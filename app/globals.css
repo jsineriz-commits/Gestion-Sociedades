@@ -1,125 +1,311 @@
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block");
-@import "tailwindcss";
-
-.material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-feature-settings: 'liga';
-  -webkit-font-smoothing: antialiased;
-  user-select: none;
-}
-
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-color: #f8fafc; /* slate-50 */
+  --text-primary: #1e293b; /* slate-800 */
+  --text-secondary: #64748b; /* slate-500 */
+  --accent: #2563eb; /* blue-600 */
+  --accent-hover: #1d4ed8; /* blue-700 */
+  --card-bg: #ffffff;
+  --border-color: #e2e8f0; /* slate-200 */
+  --success: #10b981; /* emerald-500 */
+  --warning: #f59e0b; /* amber-500 - LAS AMARILLAS */
+  --danger: #ef4444; /* red-500 */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-mono);
-}
-
-/* ── Typography base — Inter (gold standard para dashboards 2024/2025) ── */
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  /* Números tabulares: todos los dígitos ocupan el mismo ancho — esencial para tablas/KPIs */
-  font-feature-settings: "tnum" 1, "ss01" 1, "cv01" 1, "kern" 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
-/* Números en tablas, KPIs y datos — Geist Mono + tabulares */
-td, 
-.font-mono,
-.tabular-nums {
-  font-family: var(--font-mono), 'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Headings — Inter Black/ExtraBold para máximo impacto */
-h1, h2, h3, h4 {
-  font-family: var(--font-inter), 'Inter', sans-serif;
-  letter-spacing: -0.02em;
-  font-feature-settings: "tnum" 0, "ss01" 1;
-}
-
-/* Bold numbers grandes (KPI values) */
-.text-2xl, .text-3xl, .text-4xl, .text-5xl {
-  letter-spacing: -0.025em;
-  font-feature-settings: "tnum" 1;
-}
-
-/* Etiquetas y labels — tracking más apretado que el default */
-.uppercase {
-  letter-spacing: 0.06em;
-}
-
-/* Smooth scrolling */
 * {
-  scroll-behavior: smooth;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, sans-serif;
 }
 
-@keyframes progress {
-  0% { width: 0%; }
-  100% { width: 100%; }
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  min-height: 100vh;
+  margin: 0;
+  padding: 2rem;
+  line-height: 1.5;
 }
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Tablero Container */
+.tablero-container {
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-@keyframes animate-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.025em;
 }
 
-.animate-in {
-  animation: animate-in 0.2s ease-out forwards;
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
 }
 
-/* ── iOS Safe Area (bottom notch / home bar) ── */
-.pb-safe {
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+/* Tabs UI Navigation */
+.tabs-nav {
+  display: flex;
+  overflow-x: auto;
 }
 
-/* ── Mobile: touch-friendly tap areas ── */
-@media (max-width: 640px) {
-  button, [role="button"] {
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  /* Evitar zoom en inputs en iOS */
-  input, select, textarea {
-    font-size: 16px !important;
-  }
+.tab-btn {
+  padding: 1rem 1.5rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
 }
 
-/* ── Night Mode (Inverted Light) ── */
-html.night-mode {
-  filter: invert(1) hue-rotate(180deg);
-  background: #000;
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: #f8fafc;
 }
-html.night-mode img,
-html.night-mode svg,
-html.night-mode video,
-html.night-mode .keep-colors {
-  filter: invert(1) hue-rotate(180deg) !important;
+
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: #f0f9ff;
+}
+
+/* Cards & Layout */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.grid-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.kpi-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.kpi-title {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.kpi-value.amarillo {
+  color: var(--warning);
+}
+
+/* Inputs & Buttons */
+.search-bar {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 250px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.6rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.375rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+/* Quick Filters */
+.quick-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.chip {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.3rem 0.8rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+}
+
+.chip.active {
+  background: #eff6ff; /* blue-50 */
+  border-color: #bfdbfe; /* blue-200 */
+  color: var(--accent);
+}
+
+/* Table (Google Sheets Aesthetics) */
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #c0c0c0; /* Google Sheets typical border */
+  background: var(--card-bg);
+  box-shadow: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-family: Arial, sans-serif; /* Sheets usually use Arial or standard sans */
+}
+
+th, td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+  line-height: 1.3;
+}
+
+th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+td {
+  font-size: 0.8rem;
+  color: #1e293b;
+}
+
+tbody tr:nth-child(even) {
+  background-color: #fcfcfc;
+}
+
+tbody tr:hover {
+  background-color: #e8f0fe; /* Google Sheets hover color typically */
+}
+
+tr:last-child td {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+tr:hover td {
+  background: #f8fafc;
+}
+
+/* Badges */
+.badge {
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.70rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.badge-yes {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge-no {
+  background: #fef3c7; /* amber-100 */
+  color: #92400e; /* amber-900 */
+}
+
+.badge-outline {
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.metric {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.highlight {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Loader */
+.loader-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
