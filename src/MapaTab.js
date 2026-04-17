@@ -23,11 +23,20 @@ const T = {
   selectedBg: '#d0e8f5',
 };
 
-function normalizeKey(name, prov) {
-  return (String(name || '') + '|' + String(prov || ''))
+// Normaliza solo el nombre del departamento (sin provincia)
+// Maneja abreviaturas comunes del sistema argentino (SENASA/IGN)
+function normDepto(name) {
+  return String(name || '')
     .toUpperCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '') // quitar acentos
+    .replace(/\./g, ' ')             // puntos → espacio
+    .replace(/\bGRAL\b/g, 'GENERAL')
+    .replace(/\bCNEL\b/g, 'CORONEL')
+    .replace(/\bSTA\b/g, 'SANTA')
+    .replace(/\bSTO\b/g, 'SANTO')
+    .replace(/\bSAN\b/g, 'SAN')     // igual, pero limpia dobles
+    .replace(/\s+/g, ' ')           // colapsar espacios múltiples
     .trim();
 }
 
@@ -51,23 +60,22 @@ function buildDeptoData(data188, data189) {
     if (cuit) acByCuit[cuit] = String(r.asociado_comercial || '').trim();
   });
 
-  const allByDepto = {};
+  const allByDepto = {};  // key (normDepto) → { soc, kt, kv, name, prov }
   const acByDepto = {};
   const acSet = new Set();
-  const keyToMeta = {}; // key → { name, prov }
 
   (data188 || []).forEach(r => {
     const cuit = String(r.cuit || '').trim();
-    const name = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '');
-    const prov = String(r.prov_establecimiento_senasa || r.prov_fiscal_senasa || '');
-    if (!name) return;
+    const rawName = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').trim();
+    const rawProv = String(r.prov_establecimiento_senasa || r.prov_fiscal_senasa || '').trim();
+    if (!rawName) return;
 
-    const key = normalizeKey(name, prov);
+    const key = normDepto(rawName);
     const ac = acByCuit[cuit] || 'SIN ASIGNAR';
     const kt = parseFloat(r.total_bovinos) || 0;
     const kv = parseFloat(r.total_vacas) || 0;
 
-    if (!allByDepto[key]) { allByDepto[key] = { soc: 0, kt: 0, kv: 0, name, prov }; keyToMeta[key] = { name, prov }; }
+    if (!allByDepto[key]) allByDepto[key] = { soc: 0, kt: 0, kv: 0, name: rawName, prov: rawProv };
     allByDepto[key].soc++;
     allByDepto[key].kt += kt;
     allByDepto[key].kv += kv;
@@ -77,7 +85,7 @@ function buildDeptoData(data188, data189) {
     if (ac !== 'SIN ASIGNAR') acSet.add(ac);
   });
 
-  return { allByDepto, acByDepto, acList: Array.from(acSet).sort(), keyToMeta };
+  return { allByDepto, acByDepto, acList: Array.from(acSet).sort() };
 }
 
 // Leaflet map component
@@ -91,8 +99,7 @@ function LeafletMapInner({ geojson, allByDepto, acByDepto, acName, selectedKeys,
 
   const getStyle = useCallback((feature) => {
     const name = feature.properties?.nombre || '';
-    const prov = feature.properties?.provincia?.nombre || feature.properties?.provincia?.id || '';
-    const key = normalizeKey(name, prov);
+    const key = normDepto(name);
     const d = allByDepto[key];
     const isSelected = selectedKeys.has(key);
     const hasAc = acName ? (acByDepto[key]?.[acName] ?? 0) > 0 : false;
@@ -130,14 +137,14 @@ function LeafletMapInner({ geojson, allByDepto, acByDepto, acName, selectedKeys,
     const layer = L.geoJSON(geojson, {
       style: getStyle,
       onEachFeature: (feature, lyr) => {
-        const name = feature.properties?.nombre || '';
-        const prov = feature.properties?.provincia?.nombre || '';
-        const key = normalizeKey(name, prov);
+        const geoName = feature.properties?.nombre || '';
+        const geoProv = feature.properties?.provincia?.nombre || feature.properties?.provincia?.id || '';
+        const key = normDepto(geoName);
         const d = allByDepto[key];
         lyr.on({
-          click: () => onLayerClick({ key, name, prov, d: d || { soc: 0, kt: 0, kv: 0 }, acCounts: acByDepto[key] || {} }),
+          click: () => onLayerClick({ key, name: d?.name || geoName, prov: d?.prov || geoProv, d: d || { soc: 0, kt: 0, kv: 0 }, acCounts: acByDepto[key] || {} }),
           mouseover: (e) => { if (!selectedKeys.has(key)) e.target.setStyle({ weight: 2, color: T.brand, fillOpacity: 1 }); },
-          mouseout: (e) => { e.target.setStyle(getStyle(feature)); },
+          mouseout:  (e) => { e.target.setStyle(getStyle(feature)); },
         });
       },
     }).addTo(map);
@@ -167,11 +174,11 @@ export default function MapaTab({ data188, data189, selectedDeptos = [], onDepto
   }, []);
 
   const noData = !data188 || data188.length === 0;
-  const { allByDepto, acByDepto, acList, keyToMeta } = noData
-    ? { allByDepto: {}, acByDepto: {}, acList: [], keyToMeta: {} }
+  const { allByDepto, acByDepto, acList } = noData
+    ? { allByDepto: {}, acByDepto: {}, acList: [] }
     : buildDeptoData(data188, data189);
 
-  // Convertir selectedDeptos (array de {key, name, prov}) a Set de keys
+  // Convertir selectedDeptos a Set de keys
   const selectedKeys = new Set((selectedDeptos || []).map(d => d.key));
 
   const handleLayerClick = useCallback(({ key, name, prov, d, acCounts }) => {

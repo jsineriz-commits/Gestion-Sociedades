@@ -164,18 +164,25 @@ export default function Home() {
 
     // ── Filtro por departamentos seleccionados en el mapa ──
     if (selectedDeptos && selectedDeptos.length > 0) {
-      const depNames = new Set(selectedDeptos.map(d => d.name.toUpperCase()));
+      // Normalizar igual que normDepto() en MapaTab
+      const norm = s => String(s || '').toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\./g, ' ').replace(/\bGRAL\b/g, 'GENERAL')
+        .replace(/\bCNEL\b/g, 'CORONEL').replace(/\bSTA\b/g, 'SANTA')
+        .replace(/\bSTO\b/g, 'SANTO').replace(/\s+/g, ' ').trim();
+
+      const depKeys = new Set(selectedDeptos.map(d => norm(d.name)));
       base188 = base188.filter(r => {
-        const dep = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').toUpperCase();
-        return depNames.has(dep);
+        const dep = norm(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '');
+        return depKeys.has(dep);
       });
       base189 = base189.filter(r => {
-        const dep = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
-        return depNames.has(dep);
+        const dep = norm(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '');
+        return depKeys.has(dep);
       });
       baseUsers = baseUsers.filter(r => {
-        const dep = String(r.partido || r.partido_est || r.partido_usuario || r.localidad_soc || '').toUpperCase();
-        return [...depNames].some(d => dep.includes(d));
+        const dep = norm(r.partido || r.partido_est || r.partido_usuario || r.localidad_soc || '');
+        return [...depKeys].some(d => dep.includes(d));
       });
     }
 
