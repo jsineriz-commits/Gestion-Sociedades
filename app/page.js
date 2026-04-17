@@ -53,6 +53,8 @@ export default function Home() {
   const [showGlosario, setShowGlosario] = useState(false);
   const [drilldownDep, setDrilldownDep] = useState(null);
   const [sortConfig, setSortConfig] = useState({ tab: null, field: null, dir: 'desc' });
+  // Departamentos seleccionados desde el mapa (filtro visual)
+  const [selectedDeptos, setSelectedDeptos] = useState([]);
 
   const handleSort = (tab, field) => {
     setSortConfig(prev => {
@@ -160,6 +162,23 @@ export default function Home() {
       );
     }
 
+    // ── Filtro por departamentos seleccionados en el mapa ──
+    if (selectedDeptos && selectedDeptos.length > 0) {
+      const depNames = new Set(selectedDeptos.map(d => d.name.toUpperCase()));
+      base188 = base188.filter(r => {
+        const dep = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').toUpperCase();
+        return depNames.has(dep);
+      });
+      base189 = base189.filter(r => {
+        const dep = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
+        return depNames.has(dep);
+      });
+      baseUsers = baseUsers.filter(r => {
+        const dep = String(r.partido || r.partido_est || r.partido_usuario || r.localidad_soc || '').toUpperCase();
+        return [...depNames].some(d => dep.includes(d));
+      });
+    }
+
     const fifteenMonthsAgo = new Date();
     fifteenMonthsAgo.setMonth(fifteenMonthsAgo.getMonth() - 15);
 
@@ -261,7 +280,7 @@ export default function Home() {
         usuarios: baseUsers
       }
     };
-  }, [isEmpty, soloAmarillas, activeProvs, data188, data189, dataUsers, filtroPartido, filtroTextoGeneral]);
+  }, [isEmpty, soloAmarillas, activeProvs, data188, data189, dataUsers, filtroPartido, filtroTextoGeneral, selectedDeptos]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-color)' }}>
@@ -377,7 +396,7 @@ export default function Home() {
               Directorio Neo
             </button>
             <button className={`tab-btn ${activeTab === 'MAPA' ? 'active' : ''}`} onClick={() => setActiveTab('MAPA')} style={{borderLeft: '2px solid #e2e8f0'}}>
-              🗺️ Mapa
+              🗺️ Mapa {selectedDeptos.length > 0 && <span style={{background:'#1d6fa4',color:'#fff',borderRadius:99,fontSize:10,padding:'1px 6px',marginLeft:4}}>{selectedDeptos.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'CUENTAS' ? 'active' : ''}`} onClick={() => setActiveTab('CUENTAS')}>
               📁 Cuentas
@@ -387,7 +406,7 @@ export default function Home() {
 
         <div className="tablero-container" style={{ padding: '2rem', maxWidth: '100%', margin: 0 }}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: selectedDeptos.length > 0 ? '0.75rem' : '2rem' }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#0f172a' }}>Tablero de Tráfico & Operaciones</h1>
               <p className="subtitle" style={{ margin: '0.4rem 0 0 0', fontSize: '1rem', color: '#64748b' }}>
@@ -403,6 +422,17 @@ export default function Home() {
                )}
             </div>
           </div>
+
+          {/* Banner filtro mapa activo */}
+          {selectedDeptos.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.5rem', background: '#d0e8f5', border: '1px solid #bfd5e4', borderRadius: 8, padding: '8px 16px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, color: '#1d6fa4', fontWeight: 600 }}>📍 Filtro de mapa activo:</span>
+              {selectedDeptos.map(d => (
+                <span key={d.key} style={{ background: '#fff', border: '1px solid #bfd5e4', borderRadius: 99, padding: '2px 10px', fontSize: 12, color: '#1d6fa4', fontWeight: 600 }}>{d.name}</span>
+              ))}
+              <button onClick={() => setSelectedDeptos([])} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #bfd5e4', borderRadius: 6, color: '#1d6fa4', padding: '3px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>× Limpiar filtro mapa</button>
+            </div>
+          )}
 
           {isEmpty && !loading && (
             <div style={{ textAlign: 'center', padding: '6rem 2rem', background: '#fff', borderRadius: '12px', border: '1px dashed #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
@@ -798,7 +828,12 @@ export default function Home() {
         {/* SOLAPA MAPA */}
         {activeTab === 'MAPA' && (
           <Suspense fallback={<div style={{padding:'4rem',textAlign:'center',color:'#888'}}>Cargando mapa…</div>}>
-            <MapaTab data188={data188} data189={data189} />
+            <MapaTab
+              data188={data188}
+              data189={data189}
+              selectedDeptos={selectedDeptos}
+              onDeptoFilter={setSelectedDeptos}
+            />
           </Suspense>
         )}
 
