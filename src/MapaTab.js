@@ -1,58 +1,52 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// Design tokens DeCampoacampo
-const T = {
-  brand: '#3179a7',
-  brandHover: '#2d6e98',
-  brandSubtle: '#eaf2f6',
-  brandBorder: '#bfd5e4',
-  surfacePage: '#ededed',
-  surfaceL1: '#f8f8f8',
-  surfaceL2: '#ffffff',
-  contentPrimary: '#555555',
-  contentSecondary: '#666666',
-  contentTertiary: '#888888',
-  borderSecondary: '#c0c0c0',
-  borderTertiary: '#ededed',
-  positive: '#54a22b',
-  positiveSubtle: '#eef6ea',
-  notice: '#e45a00',
-  noticeSubtle: '#fcefe6',
-  selected: '#1d6fa4',
-  selectedBg: '#d0e8f5',
+// ─── Paleta ───────────────────────────────────────────────────────────────────
+const COLOR = {
+  bg:            '#0f1923',
+  surface:       '#1a2433',
+  surfaceHover:  '#1f2d41',
+  border:        '#2a3a4d',
+  borderLight:   '#344a61',
+  brand:         '#3179a7',
+  brandLight:    '#4a9dcf',
+  brandSubtle:   'rgba(49,121,167,0.18)',
+  text:          '#e2eaf2',
+  textMuted:     '#8fa8c0',
+  textFaint:     '#4d6a82',
+  positive:      '#34c68e',
+  positiveSubtle:'rgba(52,198,142,0.15)',
+  warn:          '#f0a742',
+  warnSubtle:    'rgba(240,167,66,0.15)',
+  danger:        '#e06060',
+  selected:      '#60c4f0',
+  selectedBg:    'rgba(96,196,240,0.22)',
+  // Heat scale – azul de marca
+  heat: ['#c6dff0','#8bbfde','#5598c8','#3179a7','#1e5a84','#0e3d5e'],
 };
 
-// Normaliza un nombre de departamento para matching robusto:
-// Soporta formato GADM (CamelCase, sin espacios) y SENASA (MAYÚSCULAS con espacios/abreviaturas)
+// ─── Normalización de nombres ─────────────────────────────────────────────────
 function normDepto(name) {
-  // 1. Insertar espacio antes de cada mayúscula precedida por minúscula (CamelCase → words)
   let s = String(name || '').replace(/([a-z])([A-Z])/g, '$1 $2');
   return s
     .toUpperCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')  // quitar acentos
-    .replace(/\./g, ' ')              // puntos → espacio
-    .replace(/\bGRAL\b/g, 'GENERAL')
-    .replace(/\bCNEL\b/g, 'CORONEL')
-    .replace(/\bSTA\b/g, 'SANTA')
-    .replace(/\bSTO\b/g, 'SANTO')
-    .replace(/\bTTE\b/g, 'TENIENTE')
-    .replace(/\bPTE\b/g, 'PRESIDENTE')
-    .replace(/\s+/g, ' ')            // colapsar espacios múltiples
-    .trim();
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, ' ')
+    .replace(/\bGRAL\b/g, 'GENERAL').replace(/\bCNEL\b/g, 'CORONEL')
+    .replace(/\bSTA\b/g, 'SANTA').replace(/\bSTO\b/g, 'SANTO')
+    .replace(/\bTTE\b/g, 'TENIENTE').replace(/\bPTE\b/g, 'PRESIDENTE')
+    .replace(/\s+/g, ' ').trim();
 }
 
-function getCircleColor(soc, max) {
-  if (!soc || max === 0) return '#94a3b8';
-  const t = Math.sqrt(soc / max);
-  if (t > 0.8) return '#145210';
-  if (t > 0.6) return '#234412';
-  if (t > 0.4) return '#3c731f';
-  if (t > 0.2) return '#54a22b';
-  return '#8cc171';
+// ─── Color de calor ───────────────────────────────────────────────────────────
+function heatColor(soc, max) {
+  if (!soc || max === 0) return null;
+  const t = Math.pow(soc / max, 0.45);
+  const idx = Math.min(COLOR.heat.length - 1, Math.floor(t * COLOR.heat.length));
+  return COLOR.heat[idx];
 }
 
+// ─── Agregación de datos ──────────────────────────────────────────────────────
 function buildDeptoData(data188, data189) {
   const acByCuit = {};
   (data189 || []).forEach(r => {
@@ -60,43 +54,72 @@ function buildDeptoData(data188, data189) {
     if (cuit) acByCuit[cuit] = String(r.asociado_comercial || '').trim();
   });
 
-  const allByDepto = {};
+  const byDepto = {};
   const acByDepto = {};
   const acSet = new Set();
 
   (data188 || []).forEach(r => {
-    const cuit = String(r.cuit || '').trim();
+    const cuit    = String(r.cuit || '').trim();
     const rawName = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').trim();
-    const rawProv = String(r.prov_establecimiento_senasa || r.prov_fiscal_senasa || '').trim();
+    const rawProv = String(r.prov_establecimiento_senasa   || r.prov_fiscal_senasa   || '').trim();
     if (!rawName) return;
 
     const key = normDepto(rawName);
-    const ac = acByCuit[cuit] || 'SIN ASIGNAR';
-    const kt = parseFloat(r.total_bovinos) || 0;
-    const kv = parseFloat(r.total_vacas) || 0;
+    const ac  = acByCuit[cuit] || 'SIN AC';
+    const kt  = parseFloat(r.total_bovinos) || 0;
+    const kv  = parseFloat(r.total_vacas)   || 0;
 
-    if (!allByDepto[key]) allByDepto[key] = { soc: 0, kt: 0, kv: 0, name: rawName, prov: rawProv };
-    allByDepto[key].soc++;
-    allByDepto[key].kt += kt;
-    allByDepto[key].kv += kv;
+    if (!byDepto[key]) byDepto[key] = { soc: 0, kt: 0, kv: 0, name: rawName, prov: rawProv };
+    byDepto[key].soc++;
+    byDepto[key].kt += kt;
+    byDepto[key].kv += kv;
 
     if (!acByDepto[key]) acByDepto[key] = {};
     acByDepto[key][ac] = (acByDepto[key][ac] || 0) + 1;
-    if (ac !== 'SIN ASIGNAR') acSet.add(ac);
+    if (ac !== 'SIN AC') acSet.add(ac);
   });
 
-  return { allByDepto, acByDepto, acList: Array.from(acSet).sort() };
+  return { byDepto, acByDepto, acList: Array.from(acSet).sort() };
 }
 
-// Leaflet map con círculos proporcionales por departamento
-function LeafletMapInner({ geojson, allByDepto, acByDepto, acName, selectedKeys, onLayerClick }) {
-  const mapRef = useRef(null);
-  const layerRef = useRef(null);
-  const leafletRef = useRef(null);
+// ─── Número formateado ─────────────────────────────────────────────────────────
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : String(Math.round(n));
+
+// ─── Mapa Leaflet ─────────────────────────────────────────────────────────────
+function LeafletMapInner({ geojson, byDepto, acByDepto, acName, selectedKeys, onLayerClick }) {
+  const mapRef       = useRef(null);
+  const layerRef     = useRef(null);
+  const leafletRef   = useRef(null);
   const containerRef = useRef(null);
 
-  const maxSoc = Math.max(...Object.values(allByDepto).map(d => d.soc), 1);
+  const maxSoc = Math.max(...Object.values(byDepto).map(d => d.soc), 1);
 
+  const getStyle = useCallback((feature) => {
+    const nombre = feature.properties?.NAME_2 || feature.properties?.nombre || '';
+    const key    = normDepto(nombre);
+    const d      = byDepto[key];
+    const sel    = selectedKeys.has(key);
+    const soc    = d?.soc || 0;
+
+    if (sel) return {
+      fillColor: COLOR.selected, weight: 2.5,
+      color: '#fff', fillOpacity: 0.9, dashArray: null,
+    };
+    if (acName) {
+      const hasSoc = (acByDepto[key]?.[acName] ?? 0) > 0;
+      return {
+        fillColor: hasSoc ? COLOR.brand : COLOR.border,
+        weight: 0.3, color: '#0a1520', fillOpacity: hasSoc ? 0.88 : 0.35,
+      };
+    }
+    if (!soc) return { fillColor: '#14222f', weight: 0.3, color: '#0a1520', fillOpacity: 0.8 };
+    return {
+      fillColor: heatColor(soc, maxSoc),
+      weight: 0.3, color: '#0a1520', fillOpacity: 0.88,
+    };
+  }, [byDepto, acByDepto, acName, selectedKeys, maxSoc]);
+
+  // Init
   useEffect(() => {
     async function init() {
       if (!containerRef.current || mapRef.current) return;
@@ -105,332 +128,358 @@ function LeafletMapInner({ geojson, allByDepto, acByDepto, acName, selectedKeys,
         leafletRef.current = L;
         await import('leaflet/dist/leaflet.css');
         const map = L.map(containerRef.current, {
-          center: [-38, -65],
-          zoom: 4,
-          zoomControl: true,
-          preferCanvas: true // mejor rendimiento para círculos
+          center: [-37.5, -64.5], zoom: 4, zoomControl: false,
+          preferCanvas: false,
         });
         mapRef.current = map;
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OSM &copy; CARTO'
+        // Basemap oscuro sin labels
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://carto.com">CARTO</a>',
+          subdomains: 'abcd', maxZoom: 19,
         }).addTo(map);
-      } catch (e) { console.error('Leaflet init error', e); }
+        // Zoom controls top-right
+        L.control.zoom({ position: 'topright' }).addTo(map);
+      } catch(e) { console.error(e); }
     }
     init();
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
 
+  // GeoJSON layer
   useEffect(() => {
     const map = mapRef.current;
-    const L = leafletRef.current;
+    const L   = leafletRef.current;
     if (!map || !L || !geojson) return;
     if (layerRef.current) { layerRef.current.remove(); layerRef.current = null; }
 
-    // Agrupar propiedades del GeoJSON (puede ser aplanado o anidado)
     const layer = L.geoJSON(geojson, {
-      // GADM tiene MultiPolygon — renderizar con fill directo
-      // Si por alguna razón el GeoJSON tiene Points (fallback georef), usar circleMarker
       pointToLayer: (feature, latlng) => {
-        const key = normDepto(feature.properties?.nombre || feature.properties?.NAME_2 || '');
-        const d = allByDepto[key];
+        const key = normDepto(feature.properties?.NAME_2 || feature.properties?.nombre || '');
+        const d   = byDepto[key];
         const soc = d?.soc || 0;
-        const isSelected = selectedKeys.has(key);
-        const radius = soc > 0 ? Math.max(5, Math.min(35, 5 + Math.sqrt(soc / maxSoc) * 35)) : 4;
+        const sel = selectedKeys.has(key);
+        const r   = soc > 0 ? Math.max(5, Math.min(32, 4 + Math.sqrt(soc/maxSoc)*32)) : 3;
         return L.circleMarker(latlng, {
-          radius,
-          fillColor: isSelected ? T.selected : getCircleColor(soc, maxSoc),
-          color: isSelected ? '#0a3d5e' : 'rgba(0,0,0,0.15)',
-          weight: isSelected ? 2 : 0.5,
-          fillOpacity: soc > 0 ? 0.85 : 0.3,
+          radius: r,
+          fillColor: sel ? COLOR.selected : (heatColor(soc, maxSoc) || '#1a2d3e'),
+          color: sel ? '#fff' : 'rgba(0,0,0,0.3)',
+          weight: sel ? 1.5 : 0.4,
+          fillOpacity: soc > 0 ? 0.88 : 0.25,
         });
       },
-      style: (feature) => {
-        // Para polígonos (GADM) — choropleth
-        const nombre = feature.properties?.NAME_2 || feature.properties?.nombre || '';
-        const key = normDepto(nombre);
-        const d = allByDepto[key];
-        const isSelected = selectedKeys.has(key);
-        const soc = d?.soc || 0;
-        if (isSelected) {
-          return { fillColor: T.selected, weight: 2, color: '#0a3d5e', fillOpacity: 0.85, dashArray: null };
-        }
-        if (!soc) return { fillColor: '#e2e8f0', weight: 0.3, color: '#aaa', fillOpacity: 0.5 };
-        const color = getCircleColor(soc, maxSoc);
-        return { fillColor: color, weight: 0.3, color: '#555', fillOpacity: 0.82 };
-      },
+      style: getStyle,
       onEachFeature: (feature, lyr) => {
         const nombre = feature.properties?.NAME_2 || feature.properties?.nombre || '';
         const prov   = feature.properties?.NAME_1 || feature.properties?.provincia_nombre || feature.properties?.provincia?.nombre || '';
-        const key = normDepto(nombre);
-        const d = allByDepto[key];
+        const key    = normDepto(nombre);
+        const d      = byDepto[key];
+        const soc    = d?.soc || 0;
+        const kt     = d?.kt  || 0;
+
         lyr.on({
           click: () => onLayerClick({
-            key,
-            name: d?.name || nombre,
-            prov: d?.prov || prov,
-            d: d || { soc: 0, kt: 0, kv: 0 },
-            acCounts: acByDepto[key] || {}
+            key, name: d?.name || nombre, prov: d?.prov || prov,
+            d: d || { soc: 0, kt: 0, kv: 0 }, acCounts: acByDepto[key] || {},
           }),
-          mouseover: (e) => {
-            if (!selectedKeys.has(key)) e.target.setStyle({ weight: 1.5, color: T.brand, fillOpacity: 0.95 });
-            e.target.bringToFront();
-            // update layer order for polygons
+          mouseover: e => {
+            if (!selectedKeys.has(key)) {
+              e.target.setStyle({ weight: 1.2, color: COLOR.selected, fillOpacity: 1 });
+              e.target.bringToFront();
+            }
           },
-          mouseout: (e) => {
-            layer.resetStyle(e.target);
-          },
+          mouseout: e => { layer.resetStyle(e.target); },
         });
-        const soc = d?.soc || 0;
-        const kt = d?.kt || 0;
+
         lyr.bindTooltip(
-          `<strong>${d?.name || nombre}</strong><br/>${prov}<br/>` +
-          (soc > 0 ? `${soc} soc · ${kt >= 1000 ? (kt/1000).toFixed(1)+'K' : kt} cab` : 'Sin datos en Base Clave'),
-          { sticky: true, direction: 'top' }
+          `<div style="font-family:system-ui;padding:2px 4px">
+            <div style="font-weight:700;font-size:13px;color:#e2eaf2">${d?.name || nombre}</div>
+            <div style="font-size:11px;color:#8fa8c0;margin-bottom:4px">${prov}</div>
+            ${soc > 0
+              ? `<div style="font-size:12px;color:#60c4f0"><strong>${soc}</strong> soc&nbsp;·&nbsp;<strong>${fmt(kt)}</strong> cab</div>`
+              : `<div style="font-size:11px;color:#4d6a82;font-style:italic">Sin datos</div>`}
+           </div>`,
+          { sticky: true, direction: 'top', className: 'depto-tooltip', offset: [0, -8] }
         );
       },
     }).addTo(map);
     layerRef.current = layer;
-  }, [geojson, allByDepto, acByDepto, acName, selectedKeys, maxSoc, onLayerClick]);
+  }, [geojson, getStyle, byDepto, acByDepto, onLayerClick, selectedKeys, maxSoc]);
 
   return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />;
 }
 
+// ─── Panel card ──────────────────────────────────────────────────────────────
+function Stat({ label, value, color }) {
+  return (
+    <div style={{ background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 11, color: COLOR.textMuted, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function MapaTab({ data188, data189, selectedDeptos = [], onDeptoFilter }) {
-  const [geojson, setGeojson] = useState(null);
+  const [geojson,    setGeojson]    = useState(null);
   const [loadingGeo, setLoadingGeo] = useState(true);
-  const [geoError, setGeoError] = useState(null);
-  const [acName, setAcName] = useState('');
-  const [hoveredInfo, setHoveredInfo] = useState(null);
-  const [isClient, setIsClient] = useState(false);
+  const [acName,     setAcName]     = useState('');
+  const [activeInfo, setActiveInfo] = useState(null);
+  const [isClient,   setIsClient]   = useState(false);
 
   useEffect(() => { setIsClient(true); }, []);
 
   useEffect(() => {
-    // Intentar primero el archivo local (con polígonos o centroides)
-    // Si falla, usar la API de georef online
-    const loadGeo = async () => {
+    const load = async () => {
       try {
         const r = await fetch('/deptos.geojson');
-        if (!r.ok) throw new Error('No local file');
+        if (!r.ok) throw new Error();
         const d = await r.json();
-        if (d?.features?.length > 0) { setGeojson(d); setLoadingGeo(false); return; }
-        throw new Error('Empty GeoJSON');
+        if (d?.features?.length > 0) { setGeojson(d); return; }
+        throw new Error();
       } catch {
-        // Fallback: API georef con aplanar=true para propiedades planas
         try {
           const r2 = await fetch('https://apis.datos.gob.ar/georef/api/departamentos?max=700&formato=geojson&aplanar=true');
-          if (!r2.ok) throw new Error('Georef API failed');
-          const d2 = await r2.json();
-          setGeojson(d2);
-        } catch (e2) {
-          setGeoError('No se pudo cargar el mapa de departamentos.');
-        }
-      } finally {
-        setLoadingGeo(false);
-      }
+          if (r2.ok) setGeojson(await r2.json());
+        } catch {}
+      } finally { setLoadingGeo(false); }
     };
-    loadGeo();
+    load();
   }, []);
 
   const noData = !data188 || data188.length === 0;
-  const { allByDepto, acByDepto, acList } = noData
-    ? { allByDepto: {}, acByDepto: {}, acList: [] }
+  const { byDepto, acByDepto, acList } = noData
+    ? { byDepto: {}, acByDepto: {}, acList: [] }
     : buildDeptoData(data188, data189);
 
   const selectedKeys = new Set((selectedDeptos || []).map(d => d.key));
 
   const handleLayerClick = useCallback(({ key, name, prov, d, acCounts }) => {
-    if (!onDeptoFilter) return;
-    const isSelected = selectedKeys.has(key);
-    const next = isSelected
+    const sel  = selectedKeys.has(key);
+    const next = sel
       ? (selectedDeptos || []).filter(x => x.key !== key)
       : [...(selectedDeptos || []), { key, name, prov, d, acCounts }];
-    onDeptoFilter(next);
-    setHoveredInfo({ key, name, prov, d, acCounts });
+    onDeptoFilter?.(next);
+    setActiveInfo({ key, name, prov, d, acCounts });
   }, [selectedKeys, selectedDeptos, onDeptoFilter]);
 
-  const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(Math.round(n));
+  const totalSoc  = selectedDeptos.length > 0
+    ? selectedDeptos.reduce((a, d) => a + (d.d?.soc || 0), 0)
+    : data188?.length || 0;
+  const totalDep  = selectedDeptos.length > 0 ? selectedDeptos.length : Object.keys(byDepto).length;
 
   if (!isClient) return null;
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: T.surfacePage }}>
-      {/* Mapa */}
-      <div style={{ flex: 1, position: 'relative' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: COLOR.bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+
+      {/* ── Mapa ── */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+
+        {/* Sin datos */}
         {noData && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: T.surfaceL1, zIndex: 5 }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🗺️</div>
-            <p style={{ color: T.contentSecondary, fontWeight: 600, fontSize: 16 }}>Primero cargá los datos</p>
-            <p style={{ color: T.contentTertiary, fontSize: 13 }}>Usá el botón "Actualizar Datos" del panel lateral y volvé a esta solapa.</p>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10 }}>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>🗺️</div>
+            <p style={{ color: COLOR.text, fontWeight: 700, fontSize: 18, margin: 0 }}>Sin datos cargados</p>
+            <p style={{ color: COLOR.textMuted, fontSize: 14, margin: 0, textAlign: 'center', maxWidth: 320 }}>
+              Hacé click en <strong style={{ color: COLOR.brandLight }}>Actualizar Datos</strong> en el panel lateral para cargar el mapa de potencial ganadero.
+            </p>
           </div>
         )}
 
+        {/* Loader GeoJSON */}
         {!noData && loadingGeo && (
-          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: T.surfaceL2, border: `1px solid ${T.brandBorder}`, borderRadius: 8, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 16, height: 16, border: `2px solid ${T.brand}`, borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <span style={{ fontSize: 13, color: T.contentSecondary }}>Cargando GeoJSON…</span>
+          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 20, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+            <div style={{ width: 14, height: 14, border: `2px solid ${COLOR.brand}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+            <span style={{ fontSize: 13, color: COLOR.textMuted }}>Cargando geografía…</span>
           </div>
         )}
 
-        {geoError && (
-          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 16px', fontSize: 13, color: '#dc2626' }}>
-            {geoError}
+        {/* Banner filtro activo - top center */}
+        {selectedDeptos.length > 0 && (
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: COLOR.selectedBg, backdropFilter: 'blur(10px)', border: `1px solid ${COLOR.selected}`, borderRadius: 99, padding: '6px 18px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: `0 0 20px rgba(96,196,240,0.2)`, whiteSpace: 'nowrap' }}>
+            <span style={{ width: 8, height: 8, background: COLOR.selected, borderRadius: '50%', display: 'inline-block' }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: COLOR.selected }}>
+              {selectedDeptos.length} depto{selectedDeptos.length !== 1 ? 's' : ''} · filtrando tablas
+            </span>
+            <button onClick={() => onDeptoFilter?.([])} style={{ background: 'rgba(96,196,240,0.2)', border: `1px solid ${COLOR.selected}40`, borderRadius: 99, color: COLOR.selected, padding: '2px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+              × Limpiar
+            </button>
           </div>
         )}
 
-        {/* Banner filtro activo */}
-        {selectedDeptos && selectedDeptos.length > 0 && (
-          <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: T.selected, color: '#fff', borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 8px #0003', whiteSpace: 'nowrap' }}>
-            <span>📍 {selectedDeptos.length} depto{selectedDeptos.length !== 1 ? 's' : ''} — filtrando tablas</span>
-            <button onClick={() => onDeptoFilter && onDeptoFilter([])} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', borderRadius: 12, color: '#fff', padding: '2px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>× Limpiar</button>
-          </div>
-        )}
-
-        {!noData && (
-          <LeafletMapInner
-            geojson={geojson}
-            allByDepto={allByDepto}
-            acByDepto={acByDepto}
-            acName={acName}
-            selectedKeys={selectedKeys}
-            onLayerClick={handleLayerClick}
-          />
-        )}
-
-        {/* Hint */}
-        {!noData && (!selectedDeptos || selectedDeptos.length === 0) && (
-          <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 999, background: 'rgba(255,255,255,0.9)', border: `1px solid ${T.borderTertiary}`, borderRadius: 8, padding: '5px 14px', fontSize: 12, color: T.contentTertiary, whiteSpace: 'nowrap' }}>
-            Hacé click en un círculo para filtrar por ese departamento
+        {/* Hint sin selección */}
+        {!noData && selectedDeptos.length === 0 && (
+          <div style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 999, background: 'rgba(15,25,35,0.7)', backdropFilter: 'blur(8px)', border: `1px solid ${COLOR.border}`, borderRadius: 99, padding: '5px 16px', fontSize: 12, color: COLOR.textMuted, whiteSpace: 'nowrap' }}>
+            Click en un departamento para filtrar las tablas
           </div>
         )}
 
         {/* Leyenda */}
-        <div style={{ position: 'absolute', bottom: 50, left: 12, zIndex: 1000, background: T.surfaceL2, border: `1px solid ${T.borderTertiary}`, borderRadius: 8, padding: '10px 14px', boxShadow: '0 1px 4px #0002', minWidth: 140 }}>
-          <p style={{ fontWeight: 600, color: T.contentSecondary, fontSize: 12, marginBottom: 8 }}>Soc. Base Clave / Depto</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {[
-              ['#145210', 'Muy alta (>100)'],
-              ['#234412', 'Alta (50-100)'],
-              ['#3c731f', 'Media (20-50)'],
-              ['#54a22b', 'Baja (5-20)'],
-              ['#8cc171', 'Muy baja (<5)'],
-            ].map(([c, l]) => (
-              <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 14, height: 14, borderRadius: '50%', background: c, flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: T.contentTertiary }}>{l}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, paddingTop: 6, borderTop: `1px solid ${T.borderTertiary}` }}>
-              <div style={{ width: 14, height: 14, borderRadius: '50%', background: T.selected, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: T.selected, fontWeight: 600 }}>Seleccionado (filtro)</span>
-            </div>
-          </div>
-          <p style={{ fontSize: 10, color: T.contentTertiary, marginTop: 8, lineHeight: 1.4 }}>Tamaño del círculo = cantidad de soc.</p>
-        </div>
-      </div>
-
-      {/* Panel derecho */}
-      <div style={{ width: 280, background: T.surfaceL2, borderLeft: `1px solid ${T.borderTertiary}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        {/* Selector AC */}
-        <div style={{ padding: 16, borderBottom: `1px solid ${T.borderTertiary}` }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: T.contentTertiary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Filtrar por AC</p>
-          <select value={acName} onChange={e => setAcName(e.target.value)}
-            style={{ width: '100%', padding: '6px 10px', border: `1px solid ${T.borderSecondary}`, borderRadius: 6, fontSize: 13, color: T.contentPrimary, background: T.surfaceL1, cursor: 'pointer' }}>
-            <option value="">Todos los ACs</option>
-            {acList.map(ac => <option key={ac} value={ac}>{ac}</option>)}
-          </select>
-          {acName && (
-            <button onClick={() => setAcName('')} style={{ marginTop: 8, fontSize: 11, color: T.contentTertiary, background: 'none', border: `1px solid ${T.borderSecondary}`, borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>Limpiar</button>
-          )}
-        </div>
-
-        {/* Filtro por deptos */}
-        <div style={{ padding: 16, borderBottom: `1px solid ${T.borderTertiary}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: T.contentTertiary, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-              Filtro mapa ({(selectedDeptos || []).length})
-            </p>
-            {selectedDeptos && selectedDeptos.length > 0 && (
-              <button onClick={() => onDeptoFilter && onDeptoFilter([])} style={{ fontSize: 11, color: T.notice, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Limpiar</button>
-            )}
-          </div>
-          {(!selectedDeptos || selectedDeptos.length === 0) ? (
-            <p style={{ fontSize: 12, color: T.contentTertiary, fontStyle: 'italic' }}>Hacé click en el mapa para filtrar por departamento</p>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {selectedDeptos.map(dep => (
-                <div key={dep.key} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.selectedBg, border: `1px solid ${T.brandBorder}`, borderRadius: 99, padding: '3px 10px' }}>
-                  <span style={{ fontSize: 12, color: T.selected, fontWeight: 600 }}>{dep.name}</span>
-                  <button onClick={() => onDeptoFilter && onDeptoFilter((selectedDeptos || []).filter(x => x.key !== dep.key))}
-                    style={{ background: 'none', border: 'none', color: T.brandHover, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+        {!noData && (
+          <div style={{ position: 'absolute', bottom: 14, left: 14, zIndex: 1000, background: 'rgba(15,25,35,0.85)', backdropFilter: 'blur(12px)', border: `1px solid ${COLOR.border}`, borderRadius: 12, padding: '12px 16px', boxShadow: '0 4px 24px rgba(0,0,0,0.5)', minWidth: 160 }}>
+            <p style={{ fontWeight: 700, color: COLOR.text, fontSize: 12, margin: '0 0 10px', letterSpacing: '0.04em' }}>SOC. BASE CLAVE</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                [COLOR.heat[5], 'Máxima densidad'],
+                [COLOR.heat[4], 'Muy alta'],
+                [COLOR.heat[3], 'Alta'],
+                [COLOR.heat[2], 'Media'],
+                [COLOR.heat[1], 'Baja'],
+                [COLOR.heat[0], 'Muy baja'],
+              ].map(([c, l]) => (
+                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 28, height: 10, borderRadius: 3, background: c, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: COLOR.textMuted }}>{l}</span>
                 </div>
               ))}
+              <div style={{ borderTop: `1px solid ${COLOR.border}`, marginTop: 4, paddingTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 28, height: 10, borderRadius: 3, background: COLOR.selected, flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: COLOR.selected, fontWeight: 600 }}>Seleccionado</span>
+              </div>
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Mapa Leaflet */}
+        {!noData && <LeafletMapInner
+          geojson={geojson}
+          byDepto={byDepto}
+          acByDepto={acByDepto}
+          acName={acName}
+          selectedKeys={selectedKeys}
+          onLayerClick={handleLayerClick}
+        />}
+      </div>
+
+      {/* ── Panel derecho ── */}
+      <div style={{ width: 300, background: COLOR.surface, borderLeft: `1px solid ${COLOR.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 20px 16px', borderBottom: `1px solid ${COLOR.border}` }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: COLOR.text }}>Panel de Mapa</p>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: COLOR.textMuted }}>Potencial ganadero por departamento</p>
         </div>
 
         {/* KPIs */}
-        {!noData && (
-          <div style={{ padding: 16, borderBottom: `1px solid ${T.borderTertiary}` }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: T.contentTertiary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-              {selectedDeptos && selectedDeptos.length > 0 ? 'Deptos seleccionados' : 'Totales cargados'}
+        <div style={{ padding: 16, borderBottom: `1px solid ${COLOR.border}` }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 600, color: COLOR.textFaint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {selectedDeptos.length > 0 ? 'Seleccionados' : 'Cargados'}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Stat label="Sociedades" value={totalSoc.toLocaleString('es-AR')} color={COLOR.brandLight} />
+            <Stat label="Deptos." value={totalDep} color={COLOR.positive} />
+          </div>
+        </div>
+
+        {/* Filtro AC */}
+        <div style={{ padding: 16, borderBottom: `1px solid ${COLOR.border}` }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 600, color: COLOR.textFaint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Resaltar AC
+          </p>
+          <div style={{ position: 'relative' }}>
+            <select value={acName} onChange={e => setAcName(e.target.value)}
+              style={{ width: '100%', padding: '9px 12px', background: COLOR.bg, border: `1px solid ${acName ? COLOR.brand : COLOR.border}`, borderRadius: 8, fontSize: 13, color: acName ? COLOR.brandLight : COLOR.textMuted, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
+              <option value="">Todos los ACs</option>
+              {acList.map(ac => <option key={ac} value={ac}>{ac}</option>)}
+            </select>
+            <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: COLOR.textFaint, pointerEvents: 'none' }}>▾</div>
+          </div>
+          {acName && (
+            <button onClick={() => setAcName('')} style={{ marginTop: 8, fontSize: 12, color: COLOR.textMuted, background: 'none', border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: '4px 12px', cursor: 'pointer', width: '100%' }}>
+              Limpiar filtro AC
+            </button>
+          )}
+        </div>
+
+        {/* Deptos seleccionados */}
+        <div style={{ padding: 16, borderBottom: `1px solid ${COLOR.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: COLOR.textFaint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Filtro activo ({selectedDeptos.length})
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {[
-                { label: 'Sociedades', value: (selectedDeptos?.length > 0 ? selectedDeptos.reduce((a, d) => a + (d.d?.soc || 0), 0) : data188.length).toLocaleString('es-AR'), color: T.brand },
-                { label: 'Deptos.', value: selectedDeptos?.length > 0 ? selectedDeptos.length : Object.keys(allByDepto).length, color: T.positive },
-              ].map(k => (
-                <div key={k.label} style={{ background: T.surfaceL1, borderRadius: 8, padding: '8px 10px', border: `1px solid ${T.borderTertiary}` }}>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: k.color }}>{k.value}</div>
-                  <div style={{ fontSize: 11, color: T.contentTertiary }}>{k.label}</div>
+            {selectedDeptos.length > 0 && (
+              <button onClick={() => onDeptoFilter?.([])} style={{ fontSize: 11, color: COLOR.danger, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Limpiar</button>
+            )}
+          </div>
+          {selectedDeptos.length === 0 ? (
+            <p style={{ fontSize: 12, color: COLOR.textFaint, fontStyle: 'italic', margin: 0 }}>Hacé click en el mapa para filtrar por departamento</p>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {selectedDeptos.map(dep => (
+                <div key={dep.key} style={{ display: 'flex', alignItems: 'center', gap: 4, background: COLOR.selectedBg, border: `1px solid ${COLOR.selected}50`, borderRadius: 99, padding: '3px 10px' }}>
+                  <span style={{ fontSize: 12, color: COLOR.selected, fontWeight: 600 }}>{dep.name}</span>
+                  <button onClick={() => onDeptoFilter?.((selectedDeptos || []).filter(x => x.key !== dep.key))}
+                    style={{ background: 'none', border: 'none', color: COLOR.selected, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }}>×</button>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Info depto clickeado */}
-        {hoveredInfo && (
+        {activeInfo && (
           <div style={{ padding: 16, flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
-                <p style={{ fontWeight: 700, color: T.contentPrimary, fontSize: 14, margin: 0 }}>{hoveredInfo.name}</p>
-                <p style={{ fontSize: 12, color: T.contentTertiary, margin: '2px 0 0' }}>{hoveredInfo.prov}</p>
+                <p style={{ margin: 0, fontWeight: 700, color: COLOR.text, fontSize: 15 }}>{activeInfo.name}</p>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: COLOR.textMuted }}>{activeInfo.prov}</p>
               </div>
-              <button onClick={() => setHoveredInfo(null)} style={{ background: 'none', border: 'none', color: T.contentTertiary, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+              <button onClick={() => setActiveInfo(null)} style={{ background: COLOR.bg, border: `1px solid ${COLOR.border}`, borderRadius: 6, color: COLOR.textMuted, cursor: 'pointer', width: 28, height: 28, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 12 }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
               {[
-                { label: 'Soc.', value: hoveredInfo.d.soc, color: T.brand, bg: T.brandSubtle },
-                { label: 'Kt cab', value: fmt(hoveredInfo.d.kt), color: T.notice, bg: T.noticeSubtle },
-                { label: 'Kv vac', value: fmt(hoveredInfo.d.kv), color: T.positive, bg: T.positiveSubtle },
-              ].map(k => (
-                <div key={k.label} style={{ background: k.bg, borderRadius: 8, padding: '6px 8px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: k.color }}>{k.value}</div>
-                  <div style={{ fontSize: 10, color: T.contentTertiary }}>{k.label}</div>
+                { l: 'Soc.',   v: activeInfo.d.soc,        c: COLOR.brandLight, bg: COLOR.brandSubtle },
+                { l: 'Kt cab', v: fmt(activeInfo.d.kt),     c: COLOR.warn,       bg: COLOR.warnSubtle },
+                { l: 'Kv vac', v: fmt(activeInfo.d.kv),     c: COLOR.positive,   bg: COLOR.positiveSubtle },
+              ].map(({ l, v, c, bg }) => (
+                <div key={l} style={{ background: bg, border: `1px solid ${c}30`, borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: c }}>{v}</div>
+                  <div style={{ fontSize: 10, color: COLOR.textMuted, marginTop: 2 }}>{l}</div>
                 </div>
               ))}
             </div>
-            {Object.keys(hoveredInfo.acCounts).length > 0 && (
+
+            {Object.keys(activeInfo.acCounts).length > 0 && (
               <>
-                <p style={{ fontSize: 11, fontWeight: 600, color: T.contentTertiary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>ACs</p>
-                {Object.entries(hoveredInfo.acCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([ac, cnt]) => (
-                  <div key={ac} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${T.borderTertiary}` }}>
-                    <button onClick={() => setAcName(ac)} style={{ fontSize: 13, color: T.brand, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{ac}</button>
-                    <span style={{ fontSize: 11, color: T.contentTertiary }}>{cnt} soc.</span>
-                  </div>
-                ))}
+                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 600, color: COLOR.textFaint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Asociados Comerciales</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {Object.entries(activeInfo.acCounts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([ac, cnt]) => (
+                    <div key={ac} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: COLOR.bg, borderRadius: 7, border: `1px solid ${COLOR.border}` }}>
+                      <button onClick={() => setAcName(ac)} style={{ fontSize: 13, color: COLOR.brandLight, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>{ac}</button>
+                      <span style={{ fontSize: 11, color: COLOR.textMuted, background: COLOR.surface, borderRadius: 99, padding: '1px 8px' }}>{cnt}</span>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
-            <button
-              onClick={() => handleLayerClick(hoveredInfo)}
-              style={{ width: '100%', marginTop: 12, padding: '8px', background: selectedKeys.has(hoveredInfo.key) ? T.noticeSubtle : T.brandSubtle, color: selectedKeys.has(hoveredInfo.key) ? T.notice : T.brand, border: `1px solid ${selectedKeys.has(hoveredInfo.key) ? '#f5c9b3' : T.brandBorder}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              {selectedKeys.has(hoveredInfo.key) ? '× Quitar del filtro' : '+ Agregar al filtro'}
+
+            <button onClick={() => handleLayerClick(activeInfo)}
+              style={{ width: '100%', marginTop: 14, padding: '10px', background: selectedKeys.has(activeInfo.key) ? 'rgba(224,96,96,0.15)' : COLOR.brandSubtle, color: selectedKeys.has(activeInfo.key) ? COLOR.danger : COLOR.brandLight, border: `1px solid ${selectedKeys.has(activeInfo.key) ? COLOR.danger+'50' : COLOR.brand+'50'}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, transition: 'all .2s' }}>
+              {selectedKeys.has(activeInfo.key) ? '× Quitar del filtro' : '+ Agregar al filtro'}
             </button>
           </div>
         )}
+
+        {/* Placeholder cuando no hay info seleccionada */}
+        {!activeInfo && !noData && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 }}>
+            <div style={{ fontSize: 36, opacity: 0.3 }}>🗺️</div>
+            <p style={{ fontSize: 13, color: COLOR.textFaint, textAlign: 'center', margin: 0 }}>Hacé click en un departamento para ver su detalle</p>
+          </div>
+        )}
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .depto-tooltip { background: #0f1923 !important; border: 1px solid #2a3a4d !important; border-radius: 8px !important; box-shadow: 0 4px 20px rgba(0,0,0,.6) !important; padding: 8px 12px !important; }
+        .depto-tooltip::before { display: none !important; }
+        .leaflet-tooltip-top.depto-tooltip::before { display: none !important; }
+        .leaflet-control-zoom a { background: #1a2433 !important; color: #e2eaf2 !important; border-color: #2a3a4d !important; }
+        .leaflet-control-zoom a:hover { background: #3179a7 !important; }
+        .leaflet-control-attribution { background: rgba(15,25,35,0.7) !important; color: #4d6a82 !important; font-size: 10px !important; }
+        .leaflet-control-attribution a { color: #3179a7 !important; }
+      `}</style>
     </div>
   );
 }
