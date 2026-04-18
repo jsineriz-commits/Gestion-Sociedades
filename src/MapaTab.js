@@ -23,19 +23,23 @@ const T = {
   selectedBg: '#d0e8f5',
 };
 
-// Normaliza el nombre de departamento para matching
-// Maneja abreviaturas comunes del sistema argentino (SENASA/IGN)
+// Normaliza un nombre de departamento para matching robusto:
+// Soporta formato GADM (CamelCase, sin espacios) y SENASA (MAYÚSCULAS con espacios/abreviaturas)
 function normDepto(name) {
-  return String(name || '')
+  // 1. Insertar espacio antes de cada mayúscula precedida por minúscula (CamelCase → words)
+  let s = String(name || '').replace(/([a-z])([A-Z])/g, '$1 $2');
+  return s
     .toUpperCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // quitar acentos
-    .replace(/\./g, ' ')             // puntos → espacio
+    .replace(/[\u0300-\u036f]/g, '')  // quitar acentos
+    .replace(/\./g, ' ')              // puntos → espacio
     .replace(/\bGRAL\b/g, 'GENERAL')
     .replace(/\bCNEL\b/g, 'CORONEL')
     .replace(/\bSTA\b/g, 'SANTA')
     .replace(/\bSTO\b/g, 'SANTO')
-    .replace(/\s+/g, ' ')           // colapsar espacios múltiples
+    .replace(/\bTTE\b/g, 'TENIENTE')
+    .replace(/\bPTE\b/g, 'PRESIDENTE')
+    .replace(/\s+/g, ' ')            // colapsar espacios múltiples
     .trim();
 }
 
@@ -124,77 +128,63 @@ function LeafletMapInner({ geojson, allByDepto, acByDepto, acName, selectedKeys,
 
     // Agrupar propiedades del GeoJSON (puede ser aplanado o anidado)
     const layer = L.geoJSON(geojson, {
+      // GADM tiene MultiPolygon — renderizar con fill directo
+      // Si por alguna razón el GeoJSON tiene Points (fallback georef), usar circleMarker
       pointToLayer: (feature, latlng) => {
-        const props = feature.properties || {};
-        // Soporta tanto formato aplanado (provincia_nombre) como anidado (provincia.nombre)
-        const geoName = props.nombre || '';
-        const key = normDepto(geoName);
+        const key = normDepto(feature.properties?.nombre || feature.properties?.NAME_2 || '');
         const d = allByDepto[key];
-        const isSelected = selectedKeys.has(key);
         const soc = d?.soc || 0;
-
-        // Círculo proporcional al número de sociedades
-        const radius = soc > 0
-          ? Math.max(6, Math.min(40, 6 + Math.sqrt(soc / maxSoc) * 40))
-          : 4;
-
-        const color = isSelected
-          ? T.selected
-          : (acName
-            ? (acByDepto[key]?.[acName] ? T.brand : '#e2e8f0')
-            : getCircleColor(soc, maxSoc));
-
+        const isSelected = selectedKeys.has(key);
+        const radius = soc > 0 ? Math.max(5, Math.min(35, 5 + Math.sqrt(soc / maxSoc) * 35)) : 4;
         return L.circleMarker(latlng, {
           radius,
-          fillColor: color,
+          fillColor: isSelected ? T.selected : getCircleColor(soc, maxSoc),
           color: isSelected ? '#0a3d5e' : 'rgba(0,0,0,0.15)',
           weight: isSelected ? 2 : 0.5,
           fillOpacity: soc > 0 ? 0.85 : 0.3,
-          opacity: 1,
         });
       },
-      onEachFeature: (feature, lyr) => {
-        const props = feature.properties || {};
-        const geoName = props.nombre || '';
-        const geoProv = props.provincia_nombre || props.provincia?.nombre || '';
-        const key = normDepto(geoName);
+      style: (feature) => {
+        // Para polígonos (GADM) — choropleth
+        const nombre = feature.properties?.NAME_2 || feature.properties?.nombre || '';
+        const key = normDepto(nombre);
         const d = allByDepto[key];
-
+        const isSelected = selectedKeys.has(key);
+        const soc = d?.soc || 0;
+        if (isSelected) {
+          return { fillColor: T.selected, weight: 2, color: '#0a3d5e', fillOpacity: 0.85, dashArray: null };
+        }
+        if (!soc) return { fillColor: '#e2e8f0', weight: 0.3, color: '#aaa', fillOpacity: 0.5 };
+        const color = getCircleColor(soc, maxSoc);
+        return { fillColor: color, weight: 0.3, color: '#555', fillOpacity: 0.82 };
+      },
+      onEachFeature: (feature, lyr) => {
+        const nombre = feature.properties?.NAME_2 || feature.properties?.nombre || '';
+        const prov   = feature.properties?.NAME_1 || feature.properties?.provincia_nombre || feature.properties?.provincia?.nombre || '';
+        const key = normDepto(nombre);
+        const d = allByDepto[key];
         lyr.on({
           click: () => onLayerClick({
             key,
-            name: d?.name || geoName,
-            prov: d?.prov || geoProv,
+            name: d?.name || nombre,
+            prov: d?.prov || prov,
             d: d || { soc: 0, kt: 0, kv: 0 },
             acCounts: acByDepto[key] || {}
           }),
           mouseover: (e) => {
-            const el = e.target;
-            el.setStyle({ weight: 2, color: T.brand, fillOpacity: 1 });
-            el.bringToFront();
+            if (!selectedKeys.has(key)) e.target.setStyle({ weight: 1.5, color: T.brand, fillOpacity: 0.95 });
+            e.target.bringToFront();
+            // update layer order for polygons
           },
           mouseout: (e) => {
-            const props2 = feature.properties || {};
-            const geoName2 = props2.nombre || '';
-            const key2 = normDepto(geoName2);
-            const isSelected2 = selectedKeys.has(key2);
-            const d2 = allByDepto[key2];
-            const soc2 = d2?.soc || 0;
-            e.target.setStyle({
-              weight: isSelected2 ? 2 : 0.5,
-              color: isSelected2 ? '#0a3d5e' : 'rgba(0,0,0,0.15)',
-              fillOpacity: soc2 > 0 ? 0.85 : 0.3,
-            });
+            layer.resetStyle(e.target);
           },
         });
-
-        // Tooltip
-        const provLabel = props.provincia_nombre || props.provincia?.nombre || '';
         const soc = d?.soc || 0;
         const kt = d?.kt || 0;
         lyr.bindTooltip(
-          `<strong>${geoName}</strong><br/>${provLabel}<br/>` +
-          (soc > 0 ? `${soc} soc · ${kt >= 1000 ? (kt/1000).toFixed(1)+'K' : kt} cab` : 'Sin datos'),
+          `<strong>${d?.name || nombre}</strong><br/>${prov}<br/>` +
+          (soc > 0 ? `${soc} soc · ${kt >= 1000 ? (kt/1000).toFixed(1)+'K' : kt} cab` : 'Sin datos en Base Clave'),
           { sticky: true, direction: 'top' }
         );
       },
