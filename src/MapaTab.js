@@ -256,7 +256,7 @@ function LeafletMap({
         lyr.on({
           click:()=>onFeatureClick({key,nombre:d?.name||nombre,prov:d?.prov||prov,d:d||{soc:0,kt:0,kv:0},zona}),
           mouseover:e=>{e.target.setStyle({fillOpacity:1});e.target.bringToFront();},
-          mouseout: e=>{layer.resetStyle(e.target);},
+          mouseout: e=>{layer.resetStyle(e.target);e.target.closeTooltip();},
         });
         lyr.bindTooltip(
           `<div style="font-family:system-ui;padding:2px 4px">
@@ -264,15 +264,20 @@ function LeafletMap({
             <div style="font-size:11px;color:${C.textMuted};margin-bottom:3px">${prov}</div>
             ${zona?`<div style="font-size:10px;color:${C.textFaint};margin-bottom:3px">${zCol}</div>`:''}
             ${soc>0
-              ?`<div style="font-size:12px;color:${C.sel}"><strong>${soc}</strong> soc · <strong>${fmt(kt)}</strong> cab</div>`
+              ?`<div style="font-size:12px;color:${C.sel}"><strong>${soc.toLocaleString('es-AR')}</strong> estab · <strong>${fmt(kt)}</strong> bov</div>`
               :`<div style="font-size:11px;color:${C.textFaint};font-style:italic">Sin datos</div>`
             }
            </div>`,
-          {sticky:true,direction:'top',className:'dep-tip',offset:[0,-8]}
+          {sticky:false,direction:'top',className:'dep-tip',offset:[0,-8]}
         );
       },
     }).addTo(map);
     lyrHeatR.current=layer;
+
+    // Cerrar todos los tooltips al mover el mapa (drag)
+    const closeTips = () => layer.closeTooltip();
+    map.on('movestart', closeTips);
+    return () => map.off('movestart', closeTips);
   },[geojsonDeptos,byDepto,zonaData,zonePalette,selectedKeys,onFeatureClick,maxSoc,fKey,getZona]);
 
   // ── Capa bordes DEPARTAMENTOS ─────────────────────────────────────
