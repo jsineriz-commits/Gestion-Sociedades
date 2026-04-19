@@ -90,16 +90,16 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
     const kt  = parseFloat(r.total_bovinos)||0;
     const kv  = parseFloat(r.total_vacas)  ||0;
 
+    // Q202: provincia ya es completa ("BUENOS AIRES"). Q188: abreviatura ("BUE") → expandir
+    const fullProv = r.provincia ? rawProv : expandProv(rawProv);
+
     let key;
     if (bcLookup) {
-      // Q202: provincia ya es completa ("BUENOS AIRES"). Q188: abreviatura ("BUE") → expandir
-      const fullProv = r.provincia ? rawProv : expandProv(rawProv);
-      const normKey  = norm(fullProv)+'|'+norm(rawName);
+      const normKey = norm(fullProv)+'|'+norm(rawName);
       const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
-      key = id ? String(id) : norm(rawName);
+      key = id ? String(id) : norm(fullProv)+'|'+norm(rawName);
     } else {
       // Fallback: prov+dept (garantiza unicidad entre provincias)
-      // "SAN JUAN|VEINTICINCO DE MAYO" ≠ "BUENOS AIRES|VEINTICINCO DE MAYO"
       key = norm(fullProv)+'|'+norm(rawName);
     }
 
