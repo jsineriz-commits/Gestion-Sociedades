@@ -4,13 +4,13 @@ import { runMetabaseQuery } from '../../../lib/metabase.js';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 90;
 
-// Cache en memoria (30 min — Q188 no cambia tan seguido)
+// Cache en memoria (30 min)
 let cache = null;
 let cacheTs = 0;
 const TTL = 30 * 60 * 1000;
 
-// Q188: Base Clave SENASA completa — sin filtro de provincia
-const CARD_ID = 188;
+// Q201: Padrón SENASA × Base DCAC — tiene lat/lng reales, provincia completa, partido_domicilio_est
+const CARD_ID = 201;
 
 export async function GET() {
   try {
@@ -18,8 +18,8 @@ export async function GET() {
       return NextResponse.json({ data: cache, cached: true });
     }
 
-    console.log('[/api/mapa-data] Fetching Q188 completo...');
-    const rows = await runMetabaseQuery(CARD_ID, []); // sin parámetros = toda Argentina
+    console.log('[/api/mapa-data] Fetching Q201...');
+    const rows = await runMetabaseQuery(CARD_ID, []);
     cache = rows;
     cacheTs = Date.now();
     console.log(`[/api/mapa-data] ${rows.length} filas cargadas.`);
