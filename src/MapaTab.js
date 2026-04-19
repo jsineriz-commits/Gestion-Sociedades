@@ -288,21 +288,27 @@ function LeafletMap({
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        // Colores de zona solo en modo 'zonas', sino paleta azul
-        const zPal=(filterMode==='zonas'&&zona&&zonePalette?.[zona])
-          ?getZHeat(zona,zonePalette[zona]):C.heat;
+        // Color: amarillo si seleccionado, color sólido de zona, o mapa de calor azul
+        const fillColor = sel
+          ? '#facc15'
+          : (filterMode === 'zonas' && zona && zonePalette?.[zona])
+            ? zonePalette[zona]
+            : hColZone(soc, maxSoc, C.heat);
         const r=soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
-        return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
+        return L.circleMarker(ll,{radius:r,fillColor,color:sel?'#ca8a04':'rgba(0,0,0,0.2)',weight:sel?1.5:0.4,fillOpacity:soc>0?0.88:0.2});
       },
       style:(f)=>{
         const key=fKey(f);
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        // Colores de zona solo en modo 'zonas', sino paleta azul
-        const zPal=(filterMode==='zonas'&&zona&&zonePalette?.[zona])
-          ?getZHeat(zona,zonePalette[zona]):C.heat;
-        return{fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),weight:0,fillOpacity:0.88};
+        // Color: amarillo si seleccionado, color sólido de zona, o mapa de calor azul
+        const fillColor2 = sel
+          ? '#facc15'
+          : (filterMode === 'zonas' && zona && zonePalette?.[zona])
+            ? zonePalette[zona]
+            : hColZone(soc, maxSoc, C.heat);
+        return{fillColor:fillColor2,weight:sel?1.5:0,color:sel?'#ca8a04':'transparent',fillOpacity:soc>0?0.88:0.25};
       },
       onEachFeature:(f,lyr)=>{
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';

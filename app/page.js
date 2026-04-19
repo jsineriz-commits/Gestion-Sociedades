@@ -503,9 +503,8 @@ export default function Home() {
       {/* CONTENIDO PRINCIPAL */}
       <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         
-        {/* TABS HEADER NAV */}
-        <div style={{ background: '#fff', borderBottom: '1px solid var(--border-color)', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div className="tabs-nav" style={{ marginBottom: '-1px' }}>
+        <div style={{ background: '#fff', borderBottom: '1px solid var(--border-color)', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'stretch' }}>
+          <div className="tabs-nav" style={{ marginBottom: '-1px', flex: 1 }}>
             <button className={`tab-btn ${activeTab === 'MAPA' ? 'active' : ''}`} onClick={() => setActiveTab('MAPA')}>
               🗺️ Mapa {selectedDeptos.length > 0 && <span style={{background:'#1d6fa4',color:'#fff',borderRadius:99,fontSize:10,padding:'1px 6px',marginLeft:4}}>{selectedDeptos.length}</span>}
             </button>
@@ -517,6 +516,23 @@ export default function Home() {
             </button>
             <button className={`tab-btn ${activeTab === 'CUENTAS' ? 'active' : ''}`} onClick={() => setActiveTab('CUENTAS')}>
               📁 Cuentas
+            </button>
+          </div>
+          {/* Buscar en Metabase — siempre visible a la derecha */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: '1rem', borderLeft: '1px solid var(--border-color)' }}>
+            {!isEmpty && (
+              <button
+                onClick={() => { setActiveProvs([]); setFiltroPartido(''); setSoloAmarillas(false); setData188(null); setData189(null); setSelectedDeptos([]); }}
+                title="Limpiar y resetear"
+                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >✕ Limpiar</button>
+            )}
+            <button
+              onClick={handleFetchData}
+              disabled={loading}
+              style={{ padding: '6px 16px', borderRadius: 6, background: loading ? '#93c5fd' : '#1d4ed8', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, boxShadow: '0 1px 4px rgba(29,78,216,0.25)', whiteSpace: 'nowrap', transition: 'background 0.2s' }}
+            >
+              {loading ? '⏳ Consultando…' : (isEmpty ? '🔍 Buscar en Metabase' : '🔄 Actualizar')}
             </button>
           </div>
         </div>
