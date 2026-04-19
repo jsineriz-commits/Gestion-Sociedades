@@ -157,7 +157,7 @@ function LeafletMap({
           `<div style="font-family:system-ui;padding:2px 4px">
             <div style="font-weight:700;font-size:13px;color:${C.text}">${d?.name||nombre}</div>
             <div style="font-size:11px;color:${C.textMuted};margin-bottom:3px">${prov}</div>
-            ${zone?`<div style="font-size:10px;color:${C.textFaint};margin-bottom:3px">${zCol}</div>`:''}
+            ${zona?`<div style="font-size:10px;color:${C.textFaint};margin-bottom:3px">${zCol}</div>`:''}
             ${soc>0
               ?`<div style="font-size:12px;color:${C.sel}"><strong>${soc}</strong> soc · <strong>${fmt(kt)}</strong> cab</div>`
               :`<div style="font-size:11px;color:${C.textFaint};font-style:italic">Sin datos</div>`
@@ -200,14 +200,16 @@ function LeafletMap({
     if (lyrProvR.current){lyrProvR.current.remove();lyrProvR.current=null;}
     // Modo provincias: borde depto fino + overlay de provincia blanco grueso
     if (filterMode==='provincias') {
-      // Capa de bordes departamentales finos (siempre en modo provincias)
+      const sublayers = [];
+
+      // Capa de bordes departamentales finos
       if (geojsonDeptos) {
         const dLayer = L.geoJSON(geojsonDeptos,{
           pointToLayer:()=>null,
           style:()=>({fillColor:'transparent',fillOpacity:0,color:'#7a9ab5',weight:0.4}),
           interactive:false,
         }).addTo(map);
-        lyrProvR.current = dLayer; // reutilizamos la ref para el primer sub-layer
+        sublayers.push(dLayer);
       }
 
       // Capa de bordes provinciales (blanco grueso, sin relleno)
@@ -217,8 +219,11 @@ function LeafletMap({
           style:()=>({fillColor:'transparent',fillOpacity:0,color:'#ffffff',weight:3,opacity:0.9}),
           interactive:false,
         }).addTo(map);
-        // Guardar ambas: usamos array
-        lyrProvR.current = {remove: ()=>{dLayer&&dLayer.remove?.();pLayer&&pLayer.remove?.();}};
+        sublayers.push(pLayer);
+      }
+
+      if (sublayers.length > 0) {
+        lyrProvR.current = { remove: () => sublayers.forEach(l => l.remove()) };
       }
     }
   }, [geojsonDeptos, geojsonProvs, filterMode, selectedKeys]);

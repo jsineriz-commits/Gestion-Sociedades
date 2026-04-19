@@ -15,12 +15,13 @@ export async function GET() {
       return NextResponse.json(cache);
     }
 
-    // Leer hoja Roster-Regiones
-    // Col A=Provincia, B=Departamento, C=ID, D=Zona, E=Responsable
-    // Col H=Zona (lista de zonas únicas), Col L=Responsable de zona
-    const rows = await getSheetData('Roster-Regiones');
+    // Probar ambas variantes de nombre de hoja (el tab puede tener distinto case)
+    let rows = await getSheetData('Roster-Regiones');
     if (!rows || rows.length < 2) {
-      return NextResponse.json({ error: 'Sin datos en Roster-Regiones' }, { status: 500 });
+      rows = await getSheetData('roster-regiones');
+    }
+    if (!rows || rows.length < 2) {
+      return NextResponse.json({ error: 'Hoja Roster-Regiones no encontrada o vacía' }, { status: 500 });
     }
 
     const header = rows[0];
