@@ -7,7 +7,7 @@ let cache   = null;
 let cacheTs = 0;
 const TTL   = 30 * 60 * 1000;
 
-const CARD_ID    = 201;
+const CARD_ID    = 188;
 const BASE_URL   = (process.env.METABASE_URL || '').replace(/\/$/, '');
 const API_KEY    = process.env.METABASE_API_KEY || '';  // preferido si está
 const MB_USER    = process.env.METABASE_USERNAME || '';
@@ -49,7 +49,7 @@ async function fetchQ201() {
   const body = new URLSearchParams({ parameters: JSON.stringify([]) });
   const url  = `${BASE_URL}/api/card/${CARD_ID}/query/json`;
 
-  console.log(`[mapa-data] POST ${url} (auth: ${API_KEY ? 'api-key' : 'session'})`);
+  console.log(`[mapa-data] POST ${url} (auth: ${API_KEY ? 'api-key' : 'session'}) - card ${CARD_ID}`);
 
   const r = await fetch(url, {
     method: 'POST',
