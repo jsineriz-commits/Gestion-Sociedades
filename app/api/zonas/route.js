@@ -27,19 +27,22 @@ export async function GET() {
     // A=0 Provincia, B=1 Departamento, C=2 ID (DEPTO_ID), D=3 Zona (puede truncarse), E=4 Responsable depto
     // H=7 Zona COMPLETA (lista resumen), I=8 Deptos count, J=9 Base Operativa, K=10 ID zona, L=11 Responsable zona
     const iProvA=0, iDeptB=1, iIdC=2, iZonaD=3, iRespE=4;
-    const iZonaH=7, iBaseJ=9, iRespL=11;
+    const iZonaH=7, iBaseJ=9, iRespL=11, iColorM=12;
 
     // ── Paso 1: Zonas completas desde col H + responsable col L ──────
     const zonasConResp = {}; // zona → responsable
     const zonaBase     = {}; // zona → base operativa
+    const zonaColors   = {}; // zona → color hex (col M)
     const zonasH       = [];
     data.forEach(row => {
       const z = String(row[iZonaH] || '').trim();
       const r = String(row[iRespL] || '').trim();
       const b = String(row[iBaseJ] || '').trim();
+      const c = String(row[iColorM] || '').trim();
       if (z && !zonasConResp[z]) {
         zonasConResp[z] = r;
         zonaBase[z]     = b;
+        if (c) zonaColors[z] = c.startsWith('#') ? c : '#' + c;
         zonasH.push(z);
       }
     });
@@ -108,6 +111,7 @@ export async function GET() {
       idToInfo,        // DEPTO_ID → { provincia, departamento, zona, responsable }
       zonasConResp,    // zona → responsable
       zonaBase,        // zona → base operativa
+      zonaColors,      // zona → color hex (col M del Sheet)
       zonaDeptos,      // zona → [dept_names]
       provincias,
       zonasOrdenadas,

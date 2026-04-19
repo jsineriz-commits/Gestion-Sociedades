@@ -107,9 +107,18 @@ function hColZone(soc,max,pal){
   return pal[Math.min(pal.length-1,Math.floor(t*pal.length))];
 }
 
-function buildZonePalette(zonasOrdenadas=[]) {
+// Usa colores del Sheet (col M) cuando existen, sino asigna secuencialmente de ZONA_PAL
+function buildZonePalette(zonasOrdenadas=[], zonaColors={}) {
   const p={};
-  zonasOrdenadas.forEach((z,i)=>{p[z]=ZONA_PAL[i%ZONA_PAL.length];});
+  let fallbackIdx=0;
+  zonasOrdenadas.forEach(z=>{
+    if(zonaColors[z]) {
+      p[z]=zonaColors[z]; // color real del Sheet
+    } else {
+      p[z]=ZONA_PAL[fallbackIdx%ZONA_PAL.length]; // fallback secuencial
+      fallbackIdx++;
+    }
+  });
   return p;
 }
 
@@ -279,7 +288,9 @@ function LeafletMap({
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        const zPal=getZHeat(zona,zonePalette?.[zona]);
+        // Colores de zona solo en modo 'zonas', sino paleta azul
+        const zPal=(filterMode==='zonas'&&zona&&zonePalette?.[zona])
+          ?getZHeat(zona,zonePalette[zona]):C.heat;
         const r=soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
         return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
       },
@@ -288,7 +299,9 @@ function LeafletMap({
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        const zPal=getZHeat(zona,zonePalette?.[zona]);
+        // Colores de zona solo en modo 'zonas', sino paleta azul
+        const zPal=(filterMode==='zonas'&&zona&&zonePalette?.[zona])
+          ?getZHeat(zona,zonePalette[zona]):C.heat;
         return{fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),weight:0,fillOpacity:0.88};
       },
       onEachFeature:(f,lyr)=>{
@@ -324,7 +337,7 @@ function LeafletMap({
     const closeTips = () => layer.closeTooltip();
     map.on('movestart', closeTips);
     return () => map.off('movestart', closeTips);
-  },[geojsonDeptos,byDepto,zonaData,zonePalette,selectedKeys,onFeatureClick,maxSoc,fKey,getZona]);
+  },[geojsonDeptos,byDepto,zonaData,zonePalette,filterMode,selectedKeys,onFeatureClick,maxSoc,fKey,getZona]);
 
   // ── Capa bordes DEPARTAMENTOS ─────────────────────────────────────
   useEffect(()=>{
@@ -507,7 +520,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
   const data    = (data188ext&&data188ext.length>0)?data188ext:mapaData;
   const byDepto = useMemo(()=>buildByDepto(data,deptoIds?.bcLookup,deptoIds?.bcDeptOnly),[data,deptoIds]);
   const selectedKeys = useMemo(()=>new Set((selectedDeptos||[]).map(d=>d.key)),[selectedDeptos]);
-  const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[]),[zonaData]);
+  const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[], zonaData?.zonaColors||{}),[zonaData]);
 
   // Resolver zona para una key (ID numerico o nombre)
   const getZonaForKey = useCallback((key,zona='')=>{
