@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useMemo, lazy, Suspense } from 'react';
 import dynamic from 'next/dynamic';
@@ -34,16 +34,15 @@ const ALL_PROVINCES = [
 ];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('FUNNEL');
+  const [activeTab, setActiveTab] = useState('MAPA');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeProvs, setActiveProvs] = useState([]);
   const [filtroPartido, setFiltroPartido] = useState('');
   const [soloAmarillas, setSoloAmarillas] = useState(false);
   const [busquedaUsuarios, setBusquedaUsuarios] = useState('');
   const [filtroTextoGeneral, setFiltroTextoGeneral] = useState('');
-  const [visibleCountNODCAC, setVisibleCountNODCAC] = useState(20);
-  const [visibleCountACTIVAS, setVisibleCountACTIVAS] = useState(20);
-  const [visibleCountUSUARIOS, setVisibleCountUSUARIOS] = useState(20);
+  const [visibleCountSOC, setVisibleCountSOC] = useState(30);
+  const [sociedadFilter, setSociedadFilter] = useState('todas');
   
   const [data189, setData189] = useState(null);
   const [data188, setData188] = useState(null);
@@ -311,16 +310,28 @@ export default function Home() {
       },
       tables: {
         funnel: funnelView,
-        dt188: b188Final.sort((a,b) => (b.total_bovinos || 0) - (a.total_bovinos || 0)),
-        dt189: b189Final.sort((a,b) => {
-            const fechaA = a.Ult_act ? new Date(a.Ult_act).getTime() : 0;
-            const fechaB = b.Ult_act ? new Date(b.Ult_act).getTime() : 0;
-            return fechaB - fechaA;
-        }),
+        dt_sociedades: b188Final
+          .sort((a,b) => (b.total_bovinos||0) - (a.total_bovinos||0))
+          .map(r => {
+            const cuit = String(r.cuit || '').trim();
+            return { ...r, _cuit: cuit, _dcRow: cuitToQ189[cuit] || null };
+          }),
         usuarios: baseUsers
       }
     };
   }, [isEmpty, soloAmarillas, activeProvs, data188, data189, dataUsers, filtroPartido, filtroTextoGeneral, selectedDeptos]);
+
+  // Filtro interno de la pestaña Sociedades Detalle
+  const socFiltered = useMemo(() => {
+    const all = tables?.dt_sociedades || [];
+    if (sociedadFilter === 'bc')     return all.filter(r => r.existe_en_dcac !== 'SI');
+    if (sociedadFilter === 'dcac')   return all.filter(r => r.existe_en_dcac === 'SI');
+    if (sociedadFilter === 'libres') return all.filter(r =>
+      r.existe_en_dcac === 'SI' && r._dcRow &&
+      !r._dcRow.asociado_comercial && !r._dcRow.representante
+    );
+    return all; // 'todas'
+  }, [tables, sociedadFilter]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-color)' }}>
@@ -446,20 +457,14 @@ export default function Home() {
         {/* TABS HEADER NAV */}
         <div style={{ background: '#fff', borderBottom: '1px solid var(--border-color)', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
           <div className="tabs-nav" style={{ marginBottom: '-1px' }}>
-            <button className={`tab-btn ${activeTab === 'FUNNEL' ? 'active' : ''}`} onClick={() => setActiveTab('FUNNEL')}>
-              Funnel Sociedades
-            </button>
-            <button className={`tab-btn ${activeTab === 'NODCAC' ? 'active' : ''}`} onClick={() => setActiveTab('NODCAC')}>
-              Sociedades B.C
-            </button>
-            <button className={`tab-btn ${activeTab === 'ACTIVAS' ? 'active' : ''}`} onClick={() => setActiveTab('ACTIVAS')}>
-              Sociedades dCaC
-            </button>
-            <button className={`tab-btn ${activeTab === 'USUARIOS' ? 'active' : ''}`} onClick={() => setActiveTab('USUARIOS')}>
-              Directorio Neo
-            </button>
-            <button className={`tab-btn ${activeTab === 'MAPA' ? 'active' : ''}`} onClick={() => setActiveTab('MAPA')} style={{borderLeft: '2px solid #e2e8f0'}}>
+            <button className={`tab-btn ${activeTab === 'MAPA' ? 'active' : ''}`} onClick={() => setActiveTab('MAPA')}>
               🗺️ Mapa {selectedDeptos.length > 0 && <span style={{background:'#1d6fa4',color:'#fff',borderRadius:99,fontSize:10,padding:'1px 6px',marginLeft:4}}>{selectedDeptos.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'FUNNEL' ? 'active' : ''}`} onClick={() => setActiveTab('FUNNEL')}>
+              Funnel
+            </button>
+            <button className={`tab-btn ${activeTab === 'SOCIEDADES' ? 'active' : ''}`} onClick={() => setActiveTab('SOCIEDADES')}>
+              Sociedades Detalle
             </button>
             <button className={`tab-btn ${activeTab === 'CUENTAS' ? 'active' : ''}`} onClick={() => setActiveTab('CUENTAS')}>
               📁 Cuentas
@@ -597,299 +602,115 @@ export default function Home() {
                   </div>
                 )}
 
-                {activeTab === 'NODCAC' && (
-                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
-                      <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Sociedades B.C. (No en dCaC)</h2>
+
+                {activeTab === 'SOCIEDADES' && (() => {
+                  const bStyle = v => {
+                    if (!v || v < 1) return {color:'#94a3b8'};
+                    if (v <= 500)   return {background:'#eb9b9e',color:'#000'};
+                    if (v <= 1000)  return {background:'#b86407',color:'#fff'};
+                    if (v <= 5000)  return {background:'#cccccc',color:'#000'};
+                    if (v <= 10000) return {background:'#eaaa20',color:'#000'};
+                    return {background:'#000',color:'#f59e0b'};
+                  };
+                  return (
+                  <div className="card" style={{padding:0,overflow:'hidden'}}>
+                    {/* Header + filtros */}
+                    <div style={{padding:'1rem 1.25rem',borderBottom:'1px solid var(--border-color)',background:'#f8fafc',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                      <h2 style={{fontSize:'1.1rem',fontWeight:600,margin:0,marginRight:12}}>Sociedades Detalle</h2>
+                      {[
+                        {k:'todas', l:'Todas',              c:'#475569'},
+                        {k:'bc',    l:'Solo BC (sin dCaC)', c:'#7c3aed'},
+                        {k:'dcac',  l:'En dCaC',            c:'#16a34a'},
+                        {k:'libres',l:'Cuentas Libres',     c:'#d97706'},
+                      ].map(({k,l,c}) => (
+                        <button key={k}
+                          onClick={() => { setSociedadFilter(k); setVisibleCountSOC(30); }}
+                          style={{padding:'4px 14px',borderRadius:99,border:`1.5px solid ${sociedadFilter===k?c:'#e2e8f0'}`,background:sociedadFilter===k?c:'#fff',color:sociedadFilter===k?'#fff':c,fontWeight:600,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}
+                        >{l}</button>
+                      ))}
+                      <span style={{marginLeft:'auto',fontSize:12,color:'#64748b'}}>{socFiltered.length} sociedades</span>
                     </div>
-                    <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
+
+                    {/* Tabla */}
+                    <div className="table-wrapper" style={{border:'none',borderRadius:0}}>
                       <table>
                         <thead>
                           <tr>
-                            <th onClick={() => handleSort('NODCAC', 'total_bovinos')} title="Cabezas Totales (Miles)" style={{...thStyle, textAlign: 'center', background: '#f8fafc'}}>K (Total) {sortIcon('NODCAC', 'total_bovinos')}</th>
-                            <th onClick={() => handleSort('NODCAC', 'total_vacas')} title="Vientres (Miles)" style={{...thStyle, textAlign: 'center', background: '#f8fafc'}}>Kv (Vacas) {sortIcon('NODCAC', 'total_vacas')}</th>
-                            <th onClick={() => handleSort('NODCAC', 'razon_social_senasa')} style={thStyle}>Razón Social {sortIcon('NODCAC', 'razon_social_senasa')}</th>
-                            <th onClick={() => handleSort('NODCAC', 'cuit')} style={thStyle}>CUIT {sortIcon('NODCAC', 'cuit')}</th>
-                            <th onClick={() => handleSort('NODCAC', 'prov_fiscal_senasa')} style={thStyle}>Domicilio Fiscal {sortIcon('NODCAC', 'prov_fiscal_senasa')}</th>
-                            <th onClick={() => handleSort('NODCAC', 'prov_establecimiento_senasa')} style={thStyle}>Ubicación Establecimiento {sortIcon('NODCAC', 'prov_establecimiento_senasa')}</th>
-                            <th>Status Red</th>
+                            <th>Razón Social</th>
+                            <th>CUIT</th>
+                            <th style={{textAlign:'center'}}>Cab. Total</th>
+                            <th style={{textAlign:'center'}}>Vacas</th>
+                            <th>Partido</th>
+                            <th>En dCaC</th>
+                            <th>AC / Representante</th>
+                            <th>Ops dCaC</th>
+                            <th>Últ. Operación</th>
+                            <th>Últ. Actividad</th>
+                            <th>CCC</th>
+                            <th>CI Fae</th>
+                            <th>CI Inv</th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {getSortedData(tables.dt188, 'NODCAC').slice(0, visibleCountNODCAC).map((row, i) => {
-                            const cuitBuscado = String(row.cuit || row.cuit_titular_up || '').trim();
-                            const matchDcac = data189 && data189.find(d => String(d.cuit || '').trim() === cuitBuscado);
-                            
+                        <tbody style={{fontSize:'12.5px'}}>
+                          {socFiltered.slice(0, visibleCountSOC).map((row, i) => {
+                            const dc = row._dcRow;
                             const rawBov = Number(row.total_bovinos || 0);
-                            const totalK = rawBov >= 1000 ? (rawBov/1000).toFixed(1) + 'k' : rawBov;
-                            
-                            const rawVacas = Number(row.total_vacas || 0);
-                            const vacaK = rawVacas >= 1000 ? (rawVacas/1000).toFixed(1) + 'k' : rawVacas;
-                            
-                            const getFormatStyle = (val) => {
-                              if (!val || val < 1) return { background: '#f8fafc', color: '#94a3b8' };
-                              if (val <= 500) return { background: '#eb9b9e', color: '#000' };
-                              if (val <= 1000) return { background: '#b86407', color: '#fff' };
-                              if (val <= 5000) return { background: '#cccccc', color: '#000' };
-                              if (val <= 10000) return { background: '#eaaa20', color: '#000' };
-                              return { background: '#000000', color: '#f59e0b' }; 
-                            };
-                            
-                            const totalStyle = getFormatStyle(rawBov);
-                            const vacasStyle = getFormatStyle(rawVacas);
-                            
+                            const totalK = rawBov >= 1000 ? (rawBov/1000).toFixed(1)+'k' : rawBov;
+                            const rawVac = Number(row.total_vacas || 0);
+                            const vacaK  = rawVac >= 1000 ? (rawVac/1000).toFixed(1)+'k' : rawVac;
+                            const ultOp  = dc?.Ult_op  ? new Date(dc.Ult_op).toLocaleDateString('es-AR')  : '-';
+                            const ultAct = dc?.Ult_act ? new Date(dc.Ult_act).toLocaleDateString('es-AR') : '-';
+                            const ac  = dc?.asociado_comercial || '';
+                            const rep = dc?.representante || '';
+                            const acLabel = [ac, rep].filter(Boolean).join(' / ') || '';
+                            const ccc = dc?.conc_gral ? (Number(dc.conc_gral)*100).toFixed(0)+'%' : '-';
+                            const tieneDcac = row.existe_en_dcac === 'SI';
                             return (
-                              <tr key={i} style={matchDcac ? {background: '#f0fdf4'} : {}}>
-                                <td style={{textAlign: 'center', fontWeight: 'bold', background: totalStyle.background, color: totalStyle.color}}>{totalK}</td>
-                                <td style={{textAlign: 'center', fontWeight: 'bold', background: vacasStyle.background, color: vacasStyle.color}}>{vacaK}</td>
+                              <tr key={i} style={tieneDcac ? {background:'#f0fdf4'} : {}}>
                                 <td>
-                                  <div className="highlight">{row.razon_social_senasa || row.razon_social}</div>
-                                  {matchDcac && matchDcac.razon_social !== (row.razon_social_senasa || row.razon_social) && (
-                                    <div style={{fontSize: '11px', color: '#16a34a'}}>dCaC: {matchDcac.razon_social}</div>
+                                  <div className="highlight" style={{fontWeight:600}}>{row.razon_social_senasa || row.razon_social}</div>
+                                  {dc?.['st.razon_social'] && dc['st.razon_social'] !== (row.razon_social_senasa||row.razon_social) && (
+                                    <div style={{fontSize:'11px',color:'#16a34a'}}>dCaC: {dc['st.razon_social']}</div>
                                   )}
                                 </td>
-                                <td><div className="metric">{cuitBuscado}</div></td>
+                                <td><div className="metric" style={{fontSize:11}}>{row._cuit}</div></td>
+                                <td style={{textAlign:'center',fontWeight:'bold',...bStyle(rawBov)}}>{totalK}</td>
+                                <td style={{textAlign:'center',color:'#64748b'}}>{vacaK}</td>
+                                <td style={{maxWidth:130,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.partido_establecimiento_senasa || '-'}</td>
                                 <td>
-                                  <div style={{fontSize: '12.5px', fontWeight: 600}}>{row.prov_fiscal_senasa || row.prov_fiscal}</div>
-                                  <div style={{fontSize: '11px', color: '#444'}}>{`${row.partido_fiscal_senasa || ''} - ${row.localidad_fiscal || ''}`.replace(/^- | -$/g, '').trim()}</div>
-                                  <div style={{fontSize: '10.5px', color: '#777'}}>{row.direccion_fiscal || ''}</div>
+                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:99,fontWeight:600,
+                                    background:tieneDcac?'#16a34a':'transparent',
+                                    color:tieneDcac?'#fff':'#94a3b8',
+                                    border:tieneDcac?'none':'1px solid #e2e8f0'}}>
+                                    {tieneDcac?'SÍ':'NO'}
+                                  </span>
                                 </td>
-                                <td>
-                                  <div style={{fontSize: '12.5px', fontWeight: 600}}>{row.prov_establecimiento_senasa || row.provincia}</div>
-                                  <div style={{fontSize: '11px', color: '#444'}}>{row.partido_establecimiento_senasa || ''}</div>
-                                </td>
-                                <td>
-                                  {matchDcac ? (
-                                     <span className="badge badge-yes" style={{fontSize: '10px', background: '#16a34a', color: 'white'}}>EN DCAC</span>
-                                  ) : (
-                                     <span className="badge badge-no" style={{fontSize: '10px'}}>SIN DCAC</span>
-                                  )}
-                                </td>
+                                <td style={{color:'#1d4ed8',fontWeight:acLabel?600:400}}>{acLabel||<span style={{color:'#94a3b8'}}>-</span>}</td>
+                                <td>{dc?.q_op_total > 0 ? <span style={{fontWeight:700,color:'var(--accent)'}}>📈 {dc.q_op_total}</span> : <span style={{color:'#94a3b8'}}>-</span>}</td>
+                                <td style={{whiteSpace:'nowrap'}}>{ultOp}</td>
+                                <td style={{whiteSpace:'nowrap',color:ultAct!=='-'?'#475569':'#cbd5e1'}}>{ultAct}</td>
+                                <td style={{fontWeight:600,color:ccc!=='-'?'#6366f1':'#94a3b8'}}>{ccc}</td>
+                                <td style={{textAlign:'center'}}>{dc?.sugerido_ci_faena || <span style={{color:'#cbd5e1'}}>-</span>}</td>
+                                <td style={{textAlign:'center'}}>{dc?.sugerido_ci_invernada || <span style={{color:'#cbd5e1'}}>-</span>}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
                     </div>
-                    {tables.dt188.length > visibleCountNODCAC && (
-                        <div style={{ padding: '1rem', textAlign: 'center', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                          <button onClick={() => setVisibleCountNODCAC(prev => prev + 10)} style={{ padding: '0.5rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '20px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                            Cargar 10 más ↓
-                          </button>
-                        </div>
-                    )}
-                  </div>
-                )}
 
-                {activeTab === 'ACTIVAS' && (
-                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
-                      <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Sociedades en dCaC {soloAmarillas && <span style={{color: '#d97706'}}>(Sólo Amarillas)</span>}</h2>
-                    </div>
-                    <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th colSpan="21" style={{ textAlign: 'center' }}>INFORMACIÓN PRINCIPAL</th>
-                            <th colSpan="4" style={{ textAlign: 'center', background: '#dbeafe' }}>FAENA</th>
-                            <th colSpan="4" style={{ textAlign: 'center', background: '#fee2e2' }}>INVERNADA</th>
-                            <th colSpan="4" style={{ textAlign: 'center', background: '#fef3c7' }}>CRÍA</th>
-                            <th colSpan="4" style={{ textAlign: 'center', background: '#f3f4f6' }}>DIRECCIONES</th>
-                          </tr>
-                          <tr>
-                            <th onClick={() => handleSort('ACTIVAS', 'total_bovinos')} title="Cabezas Totales (Miles)" style={thStyle}>K {sortIcon('ACTIVAS', 'total_bovinos')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'total_vacas')} title="Vientres (Miles)" style={thStyle}>Kv {sortIcon('ACTIVAS', 'total_vacas')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_usuarios')} title="% Usuarios" style={thStyle}>%U {sortIcon('ACTIVAS', 'q_usuarios')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'conc_gral')} title="Concreción General" style={thStyle}>CCC {sortIcon('ACTIVAS', 'conc_gral')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'porc_conc_5_Tot')} title="Concreción Ult 5" style={thStyle}>CCC ult 5 {sortIcon('ACTIVAS', 'porc_conc_5_Tot')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'st.razon_social')} style={thStyle}>Razon social {sortIcon('ACTIVAS', 'st.razon_social')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'st.cuit')} style={thStyle}>CUIT {sortIcon('ACTIVAS', 'st.cuit')}</th>
-                            <th>Libre</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'fecha_creacion')} style={thStyle}>Fecha creación {sortIcon('ACTIVAS', 'fecha_creacion')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'ult_ingreso')} style={thStyle}>Últ. ingreso {sortIcon('ACTIVAS', 'ult_ingreso')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_usuarios')} style={thStyle}>Q usuarios {sortIcon('ACTIVAS', 'q_usuarios')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'prov_est_bc')} style={thStyle}>Provincia {sortIcon('ACTIVAS', 'prov_est_bc')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'part_est_bc')} style={thStyle}>Partido {sortIcon('ACTIVAS', 'part_est_bc')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'asociado_comercial')} style={thStyle}>AC {sortIcon('ACTIVAS', 'asociado_comercial')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'representante')} style={thStyle}>Rep {sortIcon('ACTIVAS', 'representante')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'operador')} style={thStyle}>Operador {sortIcon('ACTIVAS', 'operador')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'sugerido_ci_faena')} style={thStyle}>CI Fae {sortIcon('ACTIVAS', 'sugerido_ci_faena')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'sugerido_ci_invernada')} style={thStyle}>CI Inv {sortIcon('ACTIVAS', 'sugerido_ci_invernada')}</th>
-                            <th>Credito</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'Ult_op')} style={thStyle}>FUOp {sortIcon('ACTIVAS', 'Ult_op')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'Ult_act')} style={thStyle}>FUAct {sortIcon('ACTIVAS', 'Ult_act')}</th>
-                            
-                            <th style={{background: '#dbeafe'}}>Q total OP</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ofrec_fae')} style={{...thStyle, background: '#dbeafe'}}>OFR {sortIcon('ACTIVAS', 'q_ofrec_fae')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ventas_fae')} style={{...thStyle, background: '#dbeafe'}}>VEN {sortIcon('ACTIVAS', 'q_ventas_fae')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_compras_fae')} style={{...thStyle, background: '#dbeafe'}}>COMP {sortIcon('ACTIVAS', 'q_compras_fae')}</th>
-                            
-                            <th style={{background: '#fee2e2'}}>Q total op</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ofrec_inv')} style={{...thStyle, background: '#fee2e2'}}>OFR {sortIcon('ACTIVAS', 'q_ofrec_inv')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ventas_inv')} style={{...thStyle, background: '#fee2e2'}}>VEN {sortIcon('ACTIVAS', 'q_ventas_inv')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_compras_inv')} style={{...thStyle, background: '#fee2e2'}}>COMP {sortIcon('ACTIVAS', 'q_compras_inv')}</th>
-                            
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ofrec_cria')} style={{...thStyle, background: '#fef3c7'}}>OFR {sortIcon('ACTIVAS', 'q_ofrec_cria')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_ventas_cria')} style={{...thStyle, background: '#fef3c7'}}>VEND {sortIcon('ACTIVAS', 'q_ventas_cria')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'FUV_cria')} style={{...thStyle, background: '#fef3c7'}}>FUV {sortIcon('ACTIVAS', 'FUV_cria')}</th>
-                            <th onClick={() => handleSort('ACTIVAS', 'q_compras_cria')} style={{...thStyle, background: '#fef3c7'}}>COMP {sortIcon('ACTIVAS', 'q_compras_cria')}</th>
-                            
-                            <th style={{background: '#f3f4f6'}}>Dir. FIscal (Prov)</th>
-                            <th style={{background: '#f3f4f6'}}>Dir. FIscal (Part)</th>
-                            <th style={{background: '#f3f4f6'}}>Dir. Establecimiento (Prov)</th>
-                            <th style={{background: '#f3f4f6'}}>Dir. Establecimiento (Part)</th>
-                          </tr>
-                        </thead>
-                        <tbody style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
-                          {getSortedData(tables.dt189, 'ACTIVAS').slice(0, visibleCountACTIVAS).map((row, i) => {
-                            const rawBov = Number(row.total_bovinos || 0);
-                            const totalK = rawBov >= 1000 ? (rawBov/1000).toFixed(1) + 'k' : rawBov;
-                            
-                            const rawVacas = Number(row.total_vacas || 0);
-                            const vacaK = rawVacas >= 1000 ? (rawVacas/1000).toFixed(1) + 'k' : rawVacas;
-                            
-                            const getFormatStyle = (val) => {
-                              if (!val || val < 1) return { background: '#f8fafc', color: '#94a3b8' };
-                              if (val <= 500) return { background: '#eb9b9e', color: '#000' };
-                              if (val <= 1000) return { background: '#b86407', color: '#fff' };
-                              if (val <= 5000) return { background: '#cccccc', color: '#000' };
-                              if (val <= 10000) return { background: '#eaaa20', color: '#000' };
-                              return { background: '#000000', color: '#f59e0b' }; 
-                            };
-                            
-                            const totalStyle = getFormatStyle(rawBov);
-                            const vacasStyle = getFormatStyle(rawVacas);
-                            
-                            const ccc = row.conc_gral ? (Number(row.conc_gral) * 100).toFixed(0) + '%' : '-';
-                            const cccU5 = row.porc_conc_5_Tot ? (Number(row.porc_conc_5_Tot) * 100).toFixed(0) + '%' : '-';
-                            const esLibre = (!row.asociado_comercial && !row.representante) ? 'SI' : 'NO';
-                            const fCreacion = row.fecha_creacion ? new Date(row.fecha_creacion).toLocaleDateString('es-AR') : '-';
-                            const uIngreso = row.ult_ingreso ? new Date(row.ult_ingreso).toLocaleDateString('es-AR') : '-';
-                            const fuOp = row.Ult_op ? new Date(row.Ult_op).toLocaleDateString('es-AR') : '-';
-                            const fuAct = row.Ult_act ? new Date(row.Ult_act).toLocaleDateString('es-AR') : '-';
-                            const fuvCria = row.FUV_cria ? new Date(row.FUV_cria).toLocaleDateString('es-AR') : '-';
-                            
-                            const qOpFaena = (row.q_ofrec_fae || 0) + (row.q_ventas_fae || 0) + (row.q_compras_fae || 0);
-                            const qOpInv = (row.q_ofrec_inv || 0) + (row.q_ventas_inv || 0) + (row.q_compras_inv || 0);
-                            
-                            return (
-                              <tr key={i} style={row.esAmarilla ? {background: '#fefbeb'} : {}}>
-                                <td style={{textAlign: 'center', fontWeight: 'bold', background: totalStyle.background, color: totalStyle.color}}>{totalK}</td>
-                                <td style={{textAlign: 'center', fontWeight: 'bold', background: vacasStyle.background, color: vacasStyle.color}}>{vacaK}</td>
-                                <td>-</td>
-                                <td><div className="metric">{ccc}</div></td>
-                                <td><div className="metric" style={{color: '#6366f1'}}>{cccU5}</div></td>
-                                <td>
-                                    <div className="highlight" style={row.esAmarilla ? {color: '#92400e', fontWeight: 600} : {fontWeight: 600}}>
-                                        {row['st.razon_social'] || row.razon_social_senasa || row.razon_social}
-                                    </div>
-                                </td>
-                                <td><div className="metric">{row['st.cuit'] || row.cuit}</div></td>
-                                <td><span className={`badge ${esLibre === 'SI' ? 'badge-yes' : 'badge-outline'}`} style={{fontSize: '9px'}}>{esLibre}</span></td>
-                                <td>{fCreacion}</td>
-                                <td>{uIngreso}</td>
-                                <td>{row.q_usuarios || 0}</td>
-                                <td>{row.prov_est_bc || row.prov_dcac || '-'}</td>
-                                <td>{`${row.part_est_bc || row.part_dcac || ''} ${row.localidad_est ? '('+row.localidad_est+')' : ''}`.trim() || '-'}</td>
-                                <td style={{fontWeight: 600, color: 'var(--accent)'}}>{row.asociado_comercial || '-'}</td>
-                                <td style={{color: '#64748b'}}>{row.representante || '-'}</td>
-                                <td>{row.operador || '-'}</td>
-                                <td>{row.sugerido_ci_faena || 0}</td>
-                                <td>{row.sugerido_ci_invernada || 0}</td>
-                                <td>-</td>
-                                <td>{fuOp}</td>
-                                <td>{fuAct}</td>
-                                
-                                <td style={{background: '#eff6ff', fontWeight: 600}}>{qOpFaena}</td>
-                                <td style={{background: '#eff6ff'}}>{row.q_ofrec_fae || 0}</td>
-                                <td style={{background: '#eff6ff'}}>{row.q_ventas_fae || 0}</td>
-                                <td style={{background: '#eff6ff'}}>{row.q_compras_fae || 0}</td>
-                                
-                                <td style={{background: '#fef2f2', fontWeight: 600}}>{qOpInv}</td>
-                                <td style={{background: '#fef2f2'}}>{row.q_ofrec_inv || 0}</td>
-                                <td style={{background: '#fef2f2'}}>{row.q_ventas_inv || 0}</td>
-                                <td style={{background: '#fef2f2'}}>{row.q_compras_inv || 0}</td>
-                                
-                                <td style={{background: '#fffbeb'}}>{row.q_ofrec_cria || 0}</td>
-                                <td style={{background: '#fffbeb'}}>{row.q_ventas_cria || 0}</td>
-                                <td style={{background: '#fffbeb'}}>{fuvCria}</td>
-                                <td style={{background: '#fffbeb'}}>{row.q_compras_cria || 0}</td>
-                                
-                                <td style={{background: '#f3f4f6'}}>{row.prov_fiscal_bc || ''}</td>
-                                <td style={{background: '#f3f4f6'}}>{row.part_fiscal_bc || ''}</td>
-                                <td style={{background: '#f3f4f6'}}>{row.prov_est_bc || ''}</td>
-                                <td style={{background: '#f3f4f6'}}>{row.part_est_bc || row.localidad_est || ''}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    {tables.dt189.length > visibleCountACTIVAS && (
-                        <div style={{ padding: '1rem', textAlign: 'center', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                          <button onClick={() => setVisibleCountACTIVAS(prev => prev + 10)} style={{ padding: '0.5rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '20px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                            Cargar 10 más ↓
-                          </button>
-                        </div>
+                    {socFiltered.length > visibleCountSOC && (
+                      <div style={{padding:'1rem',textAlign:'center',background:'#f8fafc',borderTop:'1px solid #e2e8f0'}}>
+                        <button
+                          onClick={() => setVisibleCountSOC(prev => prev + 25)}
+                          style={{padding:'0.5rem 1.5rem',background:'#fff',border:'1px solid #cbd5e1',borderRadius:'20px',cursor:'pointer',fontWeight:600,fontSize:'13px',color:'#475569',boxShadow:'0 1px 2px rgba(0,0,0,0.05)',transition:'all 0.2s'}}
+                        >Cargar 25 más ↓</button>
+                      </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
-                {activeTab === 'USUARIOS' && (
-                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border-color)', background: '#f8fafc' }}>
-                      <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Directorio de Usuarios</h2>
-                    </div>
-                    <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th onClick={() => handleSort('USUARIOS', 'nombre')} style={thStyle}>Cliente {sortIcon('USUARIOS', 'nombre')}</th>
-                            <th onClick={() => handleSort('USUARIOS', 'telefono')} style={thStyle}>Contacto {sortIcon('USUARIOS', 'telefono')}</th>
-                            <th onClick={() => handleSort('USUARIOS', 'ultimo_ingreso')} style={thStyle}>Último Ingreso {sortIcon('USUARIOS', 'ultimo_ingreso')}</th>
-                            <th onClick={() => handleSort('USUARIOS', 'razon_social')} style={thStyle}>Sociedad / Vínculo {sortIcon('USUARIOS', 'razon_social')}</th>
-                            <th>Status</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                          {getSortedData(tables.usuarios, 'USUARIOS').slice(0, visibleCountUSUARIOS).map((row, i) => (
-                            <tr key={i}>
-                              <td>
-                                <div className="highlight">{row.nombre} {row.apellido}</div>
-                                <div style={{fontSize: '0.8rem'}}>{row.username}</div>
-                              </td>
-                              <td>
-                                <div>{row.telefono}</div>
-                                <div style={{fontSize: '0.8rem', color: 'var(--accent)'}}>{row.mail_usuario || 'Sin Correo'}</div>
-                              </td>
-                              <td>
-                                 <div className="metric">
-                                   {(!row.ultimo_ingreso || row.ultimo_ingreso === '0000-00-00 00:00:00') ? 'NUNCA' : new Date(row.ultimo_ingreso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
-                                 </div>
-                              </td>
-                              <td>
-                                <div className="highlight" style={{fontSize: '0.85rem'}}>{row.razon_social}</div>
-                                <div className="metric">CUIT: {row.cuit_sociedad}</div>
-                              </td>
-                              <td>
-                                <span className={`badge ${row.tiene_ac === '1' ? 'badge-yes' : 'badge-outline'}`}>
-                                  {row.tiene_ac === '1' ? 'CON AC' : 'SIN AC'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {tables.usuarios.length > visibleCountUSUARIOS && (
-                        <div style={{ padding: '1rem', textAlign: 'center', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                          <button onClick={() => setVisibleCountUSUARIOS(prev => prev + 10)} style={{ padding: '0.5rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '20px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                            Cargar 10 más ↓
-                          </button>
-                        </div>
-                    )}
-                  </div>
-                )}
              </>
           )}
 
