@@ -35,6 +35,7 @@ const ALL_PROVINCES = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('FUNNEL');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeProvs, setActiveProvs] = useState([]);
   const [filtroPartido, setFiltroPartido] = useState('');
   const [soloAmarillas, setSoloAmarillas] = useState(false);
@@ -337,8 +338,30 @@ export default function Home() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-color)' }}>
       
-      {/* SIDEBAR DE FILTROS */}
-      <div style={{ width: '320px', flexShrink: 0, borderRight: '1px solid var(--border-color)', background: '#fff', padding: '1.5rem', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0, overflowY: 'auto' }}>
+      {/* SIDEBAR DE FILTROS — se muestra al hovear */}
+      <div
+        onMouseEnter={() => setSidebarOpen(true)}
+        onMouseLeave={() => setSidebarOpen(false)}
+        style={{
+          width: sidebarOpen ? '320px' : '12px',
+          flexShrink: 0,
+          borderRight: '1px solid var(--border-color)',
+          background: sidebarOpen ? '#fff' : 'linear-gradient(to bottom, #e0e7ef, #f0f4f8)',
+          padding: sidebarOpen ? '1.5rem' : '0',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          position: 'sticky',
+          top: 0,
+          overflowY: sidebarOpen ? 'auto' : 'hidden',
+          overflowX: 'hidden',
+          transition: 'width 0.25s ease, padding 0.25s ease',
+          cursor: sidebarOpen ? 'default' : 'pointer',
+          zIndex: 100,
+          boxShadow: sidebarOpen ? '4px 0 16px rgba(0,0,0,0.08)' : 'none',
+        }}
+      >
+        {sidebarOpen && (<>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '2rem', color: 'var(--accent)' }}>Neo<span style={{color:'#1e293b'}}>Panel</span></h2>
         
         <h3 className="kpi-title" style={{ marginBottom: '1rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.5rem' }}>Filtro de Datos Nativos</h3>
@@ -427,6 +450,7 @@ export default function Home() {
               </button>
           )}
         </div>
+        </>)}
       </div>
 
       {/* CONTENIDO PRINCIPAL */}
@@ -456,7 +480,8 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="tablero-container" style={{ padding: '2rem', maxWidth: '100%', margin: 0 }}>
+        {/* CONTENIDO PRINCIPAL: se oculta cuando el mapa está activo */}
+        <div className="tablero-container" style={{ padding: '2rem', maxWidth: '100%', margin: 0, display: activeTab === 'MAPA' ? 'none' : 'block' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: selectedDeptos.length > 0 ? '0.75rem' : '2rem' }}>
             <div>
