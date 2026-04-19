@@ -571,7 +571,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
         {loading&&(
           <div style={{marginLeft:selectedDeptos.length>0?8:'auto',display:'flex',alignItems:'center',gap:6,color:C.textFaint,fontSize:12}}>
             <div style={{width:12,height:12,border:`2px solid ${C.brand}`,borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
-            {loadingData?'Cargando Q188…':'Cargando mapa…'}
+            {loadingData?'Cargando Q201…':'Cargando mapa…'}
           </div>
         )}
       </div>
