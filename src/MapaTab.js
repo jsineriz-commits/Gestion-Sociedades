@@ -189,12 +189,11 @@ function LeafletMap({
   geojsonDeptos,geojsonProvs,
   byDepto,zonaData,gadmToId,zonePalette,
   filterMode,selectedKeys,onFeatureClick,
+  nameToId, normDeptToId,
 }) {
-  const deptoIds_nameToId    = useRef(null);
-  const deptoIds_normDeptToId = useRef(null);
-
   // fKey: resuelve key para un feature GADM
-  const fKey = useCallback((f)=>getFeatureKey(f,gadmToId,deptoIds_nameToId.current,deptoIds_normDeptToId.current),[gadmToId]);
+  // Prioridad: 1) nameToId (prov+dept) 2) normDeptToId (dept solo) 3) norm(nombre)
+  const fKey = useCallback((f)=>getFeatureKey(f,gadmToId,nameToId,normDeptToId),[gadmToId,nameToId,normDeptToId]);
 
   const cRef   = useRef(null);
   const mapR   = useRef(null);
@@ -626,7 +625,17 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
 
           {/* KPIs */}
           <div style={{position:'absolute',top:12,right:12,zIndex:1000,display:'flex',gap:8}}>
-            {[{l:'Estab.',v:totalSoc.toLocaleString('es-AR'),c:C.brandL},{l:'Deptos',v:totalDep,c:C.positive}].map(k=>(
+            {[{
+              l:'Estab.',
+              v: selectedDeptos.length>0
+                  ? selectedDeptos.reduce((a,d)=>a+(d.d?.soc||0),0).toLocaleString('es-AR')
+                  : Object.values(byDepto).reduce((a,d)=>a+(d.soc||0),0).toLocaleString('es-AR'),
+              c:C.brandL
+            },{
+              l:'Deptos',
+              v: selectedDeptos.length>0 ? selectedDeptos.length : Object.keys(byDepto).length,
+              c:C.positive
+            }].map(k=>(
               <div key={k.l} style={{background:'rgba(15,25,35,0.85)',backdropFilter:'blur(8px)',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 14px',textAlign:'center'}}>
                 <div style={{fontSize:18,fontWeight:700,color:k.c}}>{k.v}</div>
                 <div style={{fontSize:10,color:C.textMuted}}>{k.l}</div>
@@ -644,6 +653,8 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
             filterMode={filterMode}
             selectedKeys={selectedKeys}
             onFeatureClick={handleFeatureClick}
+            nameToId={deptoIds?.nameToId}
+            normDeptToId={deptoIds?.bcDeptOnly}
           />
         </div>
 
