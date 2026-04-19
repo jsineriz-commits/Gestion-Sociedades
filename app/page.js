@@ -251,8 +251,16 @@ export default function Home() {
     let b189Final = base189Marcada;
     if (soloAmarillas) {
         b189Final = b189Final.filter(r => r.esAmarilla);
-        const cuitsAmarillos = new Set(b189Final.map(r => String(r.cuit)));
-        b188Final = b188Final.filter(r => cuitsAmarillos.has(String(r.cuit)));
+        // Q189 puede usar 'cuit' o 'st.cuit'; Q188 usa 'cuit_titular_up' o 'cuit'
+        const cuitsAmarillos = new Set(
+          b189Final
+            .map(r => String(r.cuit || r['st.cuit'] || '').trim())
+            .filter(Boolean)
+        );
+        b188Final = b188Final.filter(r => {
+          const cuit = String(r.cuit || r.cuit_titular_up || '').trim();
+          return cuit && cuitsAmarillos.has(cuit);
+        });
     }
 
     if (filtroTextoGeneral && filtroTextoGeneral.trim() !== '') {
