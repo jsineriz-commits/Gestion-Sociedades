@@ -4,6 +4,10 @@ import { writeSheetData } from '../../../lib/sheets.js';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Spreadsheet dedicado para exportaciones (distinto al de datos principales)
+// El service account ya tiene acceso de editor: https://docs.google.com/spreadsheets/d/1JjreMQylVwDK-Pvvi1oSjBxNn0y5UesBdoN1iMAFuF0
+const EXPORT_SHEET_ID = process.env.EXPORT_SHEET_ID || '1JjreMQylVwDK-Pvvi1oSjBxNn0y5UesBdoN1iMAFuF0';
+
 // Columnas que se exportan al Sheet
 const COLS = [
   { key: 'razon_social',          label: 'Razón Social'              },
@@ -58,7 +62,7 @@ export async function POST(req) {
 
     const rows2D = [metaRow, header, ...dataRows];
 
-    const { url } = await writeSheetData(sheetName, rows2D);
+    const { url } = await writeSheetData(sheetName, rows2D, EXPORT_SHEET_ID);
     return NextResponse.json({ url, filas: filas.length, sheetName });
   } catch (err) {
     console.error('[export-sociedades]', err.message);
