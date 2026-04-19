@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useMemo, lazy, Suspense } from 'react';
 import dynamic from 'next/dynamic';
@@ -43,6 +43,7 @@ export default function Home() {
   const [filtroTextoGeneral, setFiltroTextoGeneral] = useState('');
   const [visibleCountSOC, setVisibleCountSOC] = useState(30);
   const [sociedadFilter, setSociedadFilter] = useState('todas');
+  const [exportando, setExportando] = useState(false);
   
   const [data189, setData189] = useState(null);
   const [data188, setData188] = useState(null);
@@ -63,6 +64,54 @@ export default function Home() {
       }
       return { tab, field, dir: 'desc' };
     });
+  };
+
+  // Exportar socFiltered al Google Sheet
+  const handleExportSheets = async () => {
+    if (exportando) return;
+    setExportando(true);
+    try {
+      // Aplanar los datos para la API
+      const filas = (socFiltered || []).map(r => ({
+        razon_social:  r.razon_social_senasa || r.razon_social || '',
+        cuit:          r._cuit || '',
+        total_bovinos: r.total_bovinos || 0,
+        total_vacas:   r.total_vacas || 0,
+        partido:       r.partido_establecimiento_senasa || '',
+        provincia:     r.prov_establecimiento_senasa || r.prov_fiscal_senasa || '',
+        en_dcac:       r.existe_en_dcac || '',
+        ac:            r._dcRow?.asociado_comercial || '',
+        representante: r._dcRow?.representante || '',
+        operador:      r._dcRow?.operador || '',
+        q_op_total:    r._dcRow?.q_op_total || '',
+        ult_op:        r._dcRow?.Ult_op ? new Date(r._dcRow.Ult_op).toLocaleDateString('es-AR') : '',
+        ult_act:       r._dcRow?.Ult_act ? new Date(r._dcRow.Ult_act).toLocaleDateString('es-AR') : '',
+        ccc:           r._dcRow?.conc_gral ? (Number(r._dcRow.conc_gral)*100).toFixed(1)+'%' : '',
+        ci_faena:      r._dcRow?.sugerido_ci_faena || '',
+        ci_invernada:  r._dcRow?.sugerido_ci_invernada || '',
+        q_ventas_fae:  r._dcRow?.q_ventas_fae || '',
+        q_ventas_inv:  r._dcRow?.q_ventas_inv || '',
+        q_ventas_cria: r._dcRow?.q_ventas_cria || '',
+      }));
+      const zonaLabel = selectedDeptos.length > 0
+        ? selectedDeptos.slice(0,5).map(d=>d.name).join(', ') + (selectedDeptos.length>5?` +${selectedDeptos.length-5}`:'')
+        : 'Sin filtro geográfico';
+      const res = await fetch('/api/export-sociedades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filas, filtro: sociedadFilter, zona: zonaLabel }),
+      });
+      const json = await res.json();
+      if (json.url) {
+        window.open(json.url, '_blank');
+      } else {
+        alert('Error al exportar: ' + (json.error || 'desconocido'));
+      }
+    } catch (e) {
+      alert('Error de red: ' + e.message);
+    } finally {
+      setExportando(false);
+    }
   };
 
   const sortIcon = (tab, field) => {
@@ -629,6 +678,29 @@ export default function Home() {
                         >{l}</button>
                       ))}
                       <span style={{marginLeft:'auto',fontSize:12,color:'#64748b'}}>{socFiltered.length} sociedades</span>
+                      <button
+                        onClick={handleExportSheets}
+                        disabled={exportando || socFiltered.length === 0}
+                        style={{
+                          marginLeft:8, padding:'5px 16px', borderRadius:99,
+                          border:'1.5px solid #16a34a',
+                          background: exportando ? '#f0fdf4' : '#16a34a',
+                          color: exportando ? '#16a34a' : '#fff',
+                          fontWeight:700, fontSize:12, cursor: exportando?'wait':'pointer',
+                          transition:'all 0.2s', display:'flex', alignItems:'center', gap:6,
+                        }}
+                      >
+                        {exportando ? (
+                          <>
+                            <span style={{display:'inline-block',width:10,height:10,border:'2px solid #16a34a',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+                            Exportando…
+                          </>
+                        ) : (
+                          <>
+                            <span>📊</span> Exportar a Sheets
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     {/* Tabla */}
