@@ -139,11 +139,8 @@ export default function Home() {
     }
 
     // ── Filtro por departamentos seleccionados en el mapa ────────────────
-    // selectedDeptos = [{key, name, prov, d, zona}]
-    //   name: nombre del partido (ej "ADOLFO ALSINA") — uppercase desde Q202
-    //   prov: provincia completa (ej "BUENOS AIRES") — uppercase desde Q202
+    // Q188: por prov+dept (abreviado). Q189: por CUIT de los Q188 filtrados O por dept.
     if (selectedDeptos.length > 0) {
-      // Mapa de nombre-completo → código abreviado que usa Q188
       const EXPAND = {
         'BUENOS AIRES':'BUE','CATAMARCA':'CAT','CHACO':'CHA','CHUBUT':'CHU',
         'CORDOBA':'CBA','CORRIENTES':'COR','ENTRE RIOS':'ERI','FORMOSA':'FOR',
@@ -153,37 +150,45 @@ export default function Home() {
         'SANTIAGO DEL ESTERO':'SDE','TIERRA DEL FUEGO':'TDF','TUCUMAN':'TUC',
         'CABA':'CABA',
       };
-      // Set de "PROV_ABREV|PARTIDO" para Q188 (que usa provincias abreviadas)
       const deptSetQ188 = new Set(
-        selectedDeptos.map(d => {
-          const abbr = EXPAND[d.prov.toUpperCase()] || d.prov.toUpperCase();
-          return abbr + '|' + d.name.toUpperCase();
-        })
+        selectedDeptos.map(d => (EXPAND[d.prov.toUpperCase()] || d.prov.toUpperCase()) + '|' + d.name.toUpperCase())
       );
-      // Set de solo nombre de partido para Q189 (provincia no siempre disponible)
       const deptNamesQ189 = new Set(selectedDeptos.map(d => d.name.toUpperCase()));
 
+      // 1. Filtrar Q188 por prov+dept
       base188 = base188.filter(r => {
         const dep  = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').toUpperCase();
         const prov = String(r.prov_establecimiento_senasa  || r.prov_fiscal_senasa   || '').toUpperCase();
         return deptSetQ188.has(prov + '|' + dep);
       });
 
+      // 2. Extraer CUITs de los Q188 filtrados (400 en el ejemplo)
+      const cuitsDeZona = new Set(base188.map(r => String(r.cuit || '').trim()).filter(Boolean));
+
+      // 3. Filtrar Q189: CUIT está en la base de la zona O establecimiento en la zona
       base189 = base189.filter(r => {
-        const dep = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
-        return deptNamesQ189.has(dep);
+        const cuit = String(r['st.cuit'] || r.cuit || '').trim();
+        if (cuit && cuitsDeZona.has(cuit)) return true; // Sociedad BC está en la zona
+        const dep  = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
+        return deptNamesQ189.has(dep); // Establecimiento principal en la zona
+      });
+
+      // 4. Filtrar usuarios por departamento
+      baseUsers = baseUsers.filter(r => {
+        const dep = String(r.partido || r.partido_est || r.partido_usuario || r.localidad_soc || '').toUpperCase();
+        return [...deptNamesQ189].some(d => dep.includes(d));
       });
     }
 
-    // Filtro Post-fetch en memoria (si agregaron un string en partido que Metabase no haya filtrado)
+    // Filtro Post-fetch en memoria (partido escrito en el sidebar)
     if (filtroPartido && filtroPartido.trim() !== '') {
       const q = filtroPartido.toUpperCase().trim();
-      base188 = base188.filter(r => 
-        String(r.partido_fiscal_senasa || '').toUpperCase().includes(q) || 
+      base188 = base188.filter(r =>
+        String(r.partido_fiscal_senasa || '').toUpperCase().includes(q) ||
         String(r.partido_establecimiento_senasa || '').toUpperCase().includes(q) ||
         String(r.partido_registro_dcac || '').toUpperCase().includes(q)
       );
-      base189 = base189.filter(r => 
+      base189 = base189.filter(r =>
         String(r.part_est_bc || '').toUpperCase().includes(q) ||
         String(r.part_fiscal_bc || '').toUpperCase().includes(q) ||
         String(r.part_dcac || '').toUpperCase().includes(q) ||
@@ -192,36 +197,12 @@ export default function Home() {
         String(r.todos_los_partidos_bc || '').toUpperCase().includes(q) ||
         String(r.todas_las_localidades_bc || '').toUpperCase().includes(q)
       );
-      baseUsers = baseUsers.filter(r => 
+      baseUsers = baseUsers.filter(r =>
         String(r.partido || '').toUpperCase().includes(q) ||
         String(r.partido_est || '').toUpperCase().includes(q) ||
         String(r.partido_usuario || '').toUpperCase().includes(q) ||
         String(r.localidad_soc || '').toUpperCase().includes(q)
       );
-    }
-
-    // ── Filtro por departamentos seleccionados en el mapa ──
-    if (selectedDeptos && selectedDeptos.length > 0) {
-      // Normalizar igual que normDepto() en MapaTab
-      const norm = s => String(s || '').toUpperCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/\./g, ' ').replace(/\bGRAL\b/g, 'GENERAL')
-        .replace(/\bCNEL\b/g, 'CORONEL').replace(/\bSTA\b/g, 'SANTA')
-        .replace(/\bSTO\b/g, 'SANTO').replace(/\s+/g, ' ').trim();
-
-      const depKeys = new Set(selectedDeptos.map(d => norm(d.name)));
-      base188 = base188.filter(r => {
-        const dep = norm(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '');
-        return depKeys.has(dep);
-      });
-      base189 = base189.filter(r => {
-        const dep = norm(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '');
-        return depKeys.has(dep);
-      });
-      baseUsers = baseUsers.filter(r => {
-        const dep = norm(r.partido || r.partido_est || r.partido_usuario || r.localidad_soc || '');
-        return [...depKeys].some(d => dep.includes(d));
-      });
     }
 
     const fifteenMonthsAgo = new Date();
@@ -266,17 +247,17 @@ export default function Home() {
 
     if (filtroTextoGeneral && filtroTextoGeneral.trim() !== '') {
       const q = filtroTextoGeneral.toUpperCase().trim();
-      b188Final = b188Final.filter(r => 
-        String(r.razon_social_senasa || r.razon_social || '').toUpperCase().includes(q) || 
+      b188Final = b188Final.filter(r =>
+        String(r.razon_social_senasa || r.razon_social || '').toUpperCase().includes(q) ||
         String(r.cuit || r.cuit_titular_up || '').toUpperCase().includes(q)
       );
-      b189Final = b189Final.filter(r => 
-        String(r['st.razon_social'] || r.razon_social || '').toUpperCase().includes(q) || 
+      b189Final = b189Final.filter(r =>
+        String(r['st.razon_social'] || r.razon_social || '').toUpperCase().includes(q) ||
         String(r['st.cuit'] || r.cuit || '').toUpperCase().includes(q) ||
         String(r.representante || '').toUpperCase().includes(q) ||
         String(r.asociado_comercial || '').toUpperCase().includes(q)
       );
-      baseUsers = baseUsers.filter(r => 
+      baseUsers = baseUsers.filter(r =>
         String(r.nombre || '').toUpperCase().includes(q) ||
         String(r.apellido || '').toUpperCase().includes(q) ||
         String(r.razon_social || '').toUpperCase().includes(q) ||
@@ -284,7 +265,14 @@ export default function Home() {
       );
     }
 
-    // TABLA 1: FUNNEL POR DEPARTAMENTO (Espejo de Hoja "Funnel Sociedades")
+    // ── CUIT → Q189 para lookup rápido en aggregation ───────────────────
+    const cuitToQ189 = {};
+    b189Final.forEach(r => {
+      const cuit = String(r['st.cuit'] || r.cuit || '').trim();
+      if (cuit) cuitToQ189[cuit] = r;
+    });
+
+    // TABLA 1: FUNNEL POR DEPARTAMENTO
     const agrupadoPartido = {};
     
     b188Final.forEach(r => {
@@ -297,19 +285,18 @@ export default function Home() {
         
         if (r.existe_en_dcac === 'SI') {
             agrupadoPartido[dep].socDcac += 1;
-            const opDC = (r.cabezas_operadas_dcac || 0);
+            // cabezas_operadas_dcac no existe en Q188 → leer desde Q189 por CUIT
+            const q189 = cuitToQ189[String(r.cuit || '').trim()];
+            const opDC = q189 ? (Number(q189.q_op_total) || 0) : 0;
             agrupadoPartido[dep].cabezasDcacOperadas += opDC;
             if (opDC > 0) agrupadoPartido[dep].socDcacOp += 1;
         }
     });
     
     b189Final.forEach(r => {
-        // En Q189 un usuario puede no tener partido si no es un BC matcheado. Intentamos mapearlo.
         const dep = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || 'S/D').toUpperCase();
-        
-        // Sumamos CCC solo si el departamento origen existe en el embudo Base
         if (agrupadoPartido[dep]) {
-            agrupadoPartido[dep].ccc += (r.total_bovinos || 0); // CCC (Cabezas Carga Comercial)
+            agrupadoPartido[dep].ccc += (r.total_bovinos || 0);
         }
     });
 
