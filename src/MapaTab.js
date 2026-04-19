@@ -74,22 +74,26 @@ function buildZonePalette(zonasOrdenadas=[]) {
 }
 
 // ─── Construir datos por depto ─────────────────────────────────────────
-// Q188: prov_establecimiento_senasa (abrev), partido_establecimiento_senasa,
-//        total_bovinos, total_vacas
-// Agrega por DEPTO_ID via bcLookup cuando disponible, fallback norm(nombre)
+// Q202: pre-agregado por depto — provincia (completa), partido_domicilio_est,
+//       total_establecimientos, total_bovinos, total_vacas (1 fila por depto)
+// Compatible también con Q188 como fallback (1 fila por establecimiento)
 function buildByDepto(data, bcLookup, bcDeptOnly) {
   const m={};
   (data||[]).forEach(r=>{
-    const rawName = String(r.partido_establecimiento_senasa||r.partido_fiscal_senasa||'').trim();
-    const rawProv = String(r.prov_establecimiento_senasa  ||r.prov_fiscal_senasa  ||'').trim();
+    // Q202 usa partido_domicilio_est; Q188 usa partido_establecimiento_senasa
+    const rawName = String(r.partido_domicilio_est || r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').trim();
+    const rawProv = String(r.provincia             || r.prov_establecimiento_senasa    || r.prov_fiscal_senasa    || '').trim();
     if (!rawName) return;
-    const kt = parseFloat(r.total_bovinos)||0;
-    const kv = parseFloat(r.total_vacas)  ||0;
+
+    // Q202 ya trae totales; Q188 tiene 1 fila por establecimiento
+    const soc = r.total_establecimientos != null ? parseFloat(r.total_establecimientos)||0 : 1;
+    const kt  = parseFloat(r.total_bovinos)||0;
+    const kv  = parseFloat(r.total_vacas)  ||0;
 
     let key;
     if (bcLookup) {
-      // Expandir abreviatura: "BUE" → "BUENOS AIRES" para match con BC-ID sheet
-      const fullProv = expandProv(rawProv);
+      // Q202: provincia ya es completa ("BUENOS AIRES"). Q188: abreviatura ("BUE") → expandir
+      const fullProv = r.provincia ? rawProv : expandProv(rawProv);
       const normKey  = norm(fullProv)+'|'+norm(rawName);
       const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
       key = id ? String(id) : norm(rawName);
@@ -98,9 +102,9 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
     }
 
     if (!m[key]) m[key]={soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
-    m[key].soc++;
-    m[key].kt+=kt;
-    m[key].kv+=kv;
+    m[key].soc += soc;
+    m[key].kt  += kt;
+    m[key].kv  += kv;
   });
   return m;
 }
@@ -572,7 +576,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
         {loading&&(
           <div style={{marginLeft:selectedDeptos.length>0?8:'auto',display:'flex',alignItems:'center',gap:6,color:C.textFaint,fontSize:12}}>
             <div style={{width:12,height:12,border:`2px solid ${C.brand}`,borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
-            {loadingData?'Cargando Q188…':'Cargando mapa…'}
+            {loadingData?'Cargando datos…':'Cargando mapa…'}
           </div>
         )}
       </div>
@@ -604,7 +608,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
 
           {/* Leyenda */}
           <div style={{position:'absolute',bottom:12,left:12,zIndex:1000,background:'rgba(15,25,35,0.88)',backdropFilter:'blur(12px)',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',minWidth:156}}>
-            <p style={{margin:'0 0 8px',fontSize:11,fontWeight:700,color:C.text,letterSpacing:'0.04em'}}>SOC. BASE CLAVE (Q188)</p>
+            <p style={{margin:'0 0 8px',fontSize:11,fontWeight:700,color:C.text,letterSpacing:'0.04em'}}>ESTABLECIMIENTOS SENASA</p>
             {C.heat.slice().reverse().map((col,i)=>{
               const labels=['Máxima','Muy alta','Alta','Media','Baja','Muy baja'];
               return(
@@ -622,7 +626,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
 
           {/* KPIs */}
           <div style={{position:'absolute',top:12,right:12,zIndex:1000,display:'flex',gap:8}}>
-            {[{l:'Soc.',v:totalSoc.toLocaleString('es-AR'),c:C.brandL},{l:'Deptos',v:totalDep,c:C.positive}].map(k=>(
+            {[{l:'Estab.',v:totalSoc.toLocaleString('es-AR'),c:C.brandL},{l:'Deptos',v:totalDep,c:C.positive}].map(k=>(
               <div key={k.l} style={{background:'rgba(15,25,35,0.85)',backdropFilter:'blur(8px)',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 14px',textAlign:'center'}}>
                 <div style={{fontSize:18,fontWeight:700,color:k.c}}>{k.v}</div>
                 <div style={{fontSize:10,color:C.textMuted}}>{k.l}</div>
@@ -667,9 +671,9 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
 
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:14}}>
                 {[
-                  {l:'Soc.',   v:activeInfo.d.soc,       c:C.brandL,  bg:C.brandSub},
-                  {l:'Kt cab', v:fmt(activeInfo.d.kt),   c:C.warn,    bg:C.warnSub},
-                  {l:'Kv vac', v:fmt(activeInfo.d.kv),   c:C.positive,bg:C.posSub},
+                  {l:'Estab.',  v:activeInfo.d.soc.toLocaleString('es-AR'), c:C.brandL,  bg:C.brandSub},
+                  {l:'Bovinos', v:fmt(activeInfo.d.kt), c:C.warn,    bg:C.warnSub},
+                  {l:'Vacas',   v:fmt(activeInfo.d.kv), c:C.positive,bg:C.posSub},
                 ].map(({l,v,c,bg})=>(
                   <div key={l} style={{background:bg,borderRadius:8,padding:'7px 6px',textAlign:'center'}}>
                     <div style={{fontWeight:700,fontSize:15,color:c}}>{v}</div>

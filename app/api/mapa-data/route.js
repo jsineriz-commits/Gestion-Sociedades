@@ -7,7 +7,7 @@ let cache   = null;
 let cacheTs = 0;
 const TTL   = 30 * 60 * 1000;
 
-const CARD_ID    = 188;
+const CARD_ID    = 202; // Deptos Agregado: provincia, partido_domicilio_est, total_establecimientos, total_bovinos, total_vacas
 const BASE_URL   = (process.env.METABASE_URL || '').replace(/\/$/, '');
 const API_KEY    = process.env.METABASE_API_KEY || '';  // preferido si está
 const MB_USER    = process.env.METABASE_USERNAME || '';
