@@ -67,6 +67,46 @@ function hCol(soc,max) {
   return C.heat[Math.min(C.heat.length-1,Math.floor(t*C.heat.length))];
 }
 
+// ─── Paleta de calor por zona ──────────────────────────────────────────
+function _hue2rgb(p,q,t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}
+function _hexToHsl(hex){
+  const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);if(mx===r)h=((g-b)/d+(g<b?6:0))/6;else if(mx===g)h=((b-r)/d+2)/6;else h=((r-g)/d+4)/6;}
+  return[h*360,s*100,l*100];
+}
+function _hslToHex(h,s,l){
+  h/=360;s/=100;l/=100;let r,g,b;
+  if(s===0){r=g=b=l;}else{const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;r=_hue2rgb(p,q,h+1/3);g=_hue2rgb(p,q,h);b=_hue2rgb(p,q,h-1/3);}
+  return'#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('');
+}
+// Genera 6 pasos de paleta oscuro→claro en el matiz de la zona
+function makeZoneHeatPalette(baseHex,steps=6){
+  if(!baseHex) return C.heat;
+  try{
+    const[h,s]=_hexToHsl(baseHex);
+    return Array.from({length:steps},(_,i)=>{
+      const t=i/(steps-1);
+      const lightness=12+t*62;       // 12% (oscuro) → 74% (claro brillante)
+      const saturation=10+t*Math.min(s,90); // poco saturado → saturado
+      return _hslToHex(h,Math.min(100,saturation),Math.min(88,lightness));
+    });
+  }catch(e){return C.heat;}
+}
+// Cache de paletas por zona (evita recomputar en cada feature)
+const _zoneHeatCache={};
+function getZHeat(zona,col){
+  if(!zona||!col) return C.heat;
+  if(!_zoneHeatCache[zona]) _zoneHeatCache[zona]=makeZoneHeatPalette(col);
+  return _zoneHeatCache[zona];
+}
+// Aplica calor usando paleta de zona
+function hColZone(soc,max,pal){
+  if(!soc||max===0) return '#14222f';
+  const t=Math.pow(soc/max,0.45);
+  return pal[Math.min(pal.length-1,Math.floor(t*pal.length))];
+}
+
 function buildZonePalette(zonasOrdenadas=[]) {
   const p={};
   zonasOrdenadas.forEach((z,i)=>{p[z]=ZONA_PAL[i%ZONA_PAL.length];});
@@ -237,13 +277,19 @@ function LeafletMap({
       pointToLayer:(f,ll)=>{
         const key=fKey(f);
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
+        const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
+        const zona=getZona(key,nombre);
+        const zPal=getZHeat(zona,zonePalette?.[zona]);
         const r=soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
-        return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hCol(soc,maxSoc),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
+        return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
       },
       style:(f)=>{
         const key=fKey(f);
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
-        return{fillColor:sel?C.sel:hCol(soc,maxSoc),weight:0,fillOpacity:0.88};
+        const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
+        const zona=getZona(key,nombre);
+        const zPal=getZHeat(zona,zonePalette?.[zona]);
+        return{fillColor:sel?C.sel:hColZone(soc,maxSoc,zPal),weight:0,fillOpacity:0.88};
       },
       onEachFeature:(f,lyr)=>{
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
