@@ -836,7 +836,7 @@ export default function Home() {
         {activeTab === 'MAPA' && (
           <Suspense fallback={<div style={{padding:'4rem',textAlign:'center',color:'#888'}}>Cargando mapa…</div>}>
             <MapaTab
-              data188={data188}
+              data188ext={data188}
               data189={data189}
               selectedDeptos={selectedDeptos}
               onDeptoFilter={setSelectedDeptos}
