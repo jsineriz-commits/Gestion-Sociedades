@@ -978,53 +978,63 @@ export default function Home() {
               
               <div className="table-wrapper" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', margin: 0 }}>
                  <table>
-                   <thead>
-                     <tr>
-                       <th>Sociedad (Razón Social)</th>
-                       <th>CUIT</th>
-                       <th>Cabezas Totales</th>
-                       <th>Cabezas Vaca</th>
-                       <th>Cuenta en dCaC</th>
-                       <th>Cabezas Operadas dCaC</th>
-                       <th>Fecha Últ. OP dCaC</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {depRows.map((r, i) => {
-                        const cuit = String(r.cuit || r.cuit_titular_up || '').trim();
-                        const dcacRow = data189 && data189.find(d => String(d.cuit || '').trim() === cuit);
-                        const ultOp = dcacRow && dcacRow.Ult_op ? new Date(dcacRow.Ult_op).toLocaleDateString('es-AR') : '-';
-                        const tieneCuenta = r.existe_en_dcac === 'SI';
-                        
-                        return (
-                          <tr key={i} style={tieneCuenta ? {background: '#f0fdf4'} : {}}>
-                            <td>
-                              <div className="highlight">{r.razon_social_senasa || r.razon_social}</div>
-                              {tieneCuenta && dcacRow && dcacRow.razon_social !== (r.razon_social_senasa || r.razon_social) && (
-                                <div style={{fontSize: '11px', color: '#16a34a', marginTop: '4px'}}>dCaC: {dcacRow.razon_social}</div>
-                              )}
-                            </td>
-                            <td><div className="metric">{cuit}</div></td>
-                            <td><div className="metric">🐄 {Number(r.total_bovinos || 0).toLocaleString('es-AR')}</div></td>
-                            <td><span style={{color: '#64748b', fontSize: '13px'}}>{Number(r.total_vacas || 0).toLocaleString('es-AR')}</span></td>
-                            <td>
-                              <span className={`badge ${tieneCuenta ? 'badge-yes' : 'badge-outline'}`} style={{fontSize: '10px', background: tieneCuenta ? '#16a34a' : 'transparent', color: tieneCuenta ? '#fff' : '#64748b'}}>
-                                {tieneCuenta ? 'SÍ' : 'NO'}
-                              </span>
-                            </td>
-                            <td>
-                              {tieneCuenta && r.cabezas_operadas_dcac > 0 ? (
-                                <div className="metric" style={{color: 'var(--accent)'}}>📈 {Number(r.cabezas_operadas_dcac || 0).toLocaleString('es-AR')}</div>
-                              ) : (
-                                <span style={{color: '#94a3b8'}}>-</span>
-                              )}
-                            </td>
-                            <td>
-                              <span style={{fontWeight: 500, color: ultOp !== '-' ? '#0f172a' : '#cbd5e1'}}>{ultOp}</span>
-                            </td>
-                          </tr>
-                        );
-                     })}
+                    <thead>
+                      <tr>
+                        <th>Sociedad (Razón Social)</th>
+                        <th>CUIT</th>
+                        <th>Cab. Totales</th>
+                        <th>Cab. Vaca</th>
+                        <th>En dCaC</th>
+                        <th>AC / Representante</th>
+                        <th>Ops dCaC</th>
+                        <th>Últ. Operación</th>
+                        <th>Últ. Actividad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {depRows.map((r, i) => {
+                         const cuit = String(r.cuit || r.cuit_titular_up || '').trim();
+                         // Q189 usa 'st.cuit' como campo CUIT
+                         const dcacRow = data189 && data189.find(d => String(d['st.cuit'] || d.cuit || '').trim() === cuit);
+                         const tieneCuenta = r.existe_en_dcac === 'SI';
+                         const ultOp  = dcacRow?.Ult_op  ? new Date(dcacRow.Ult_op).toLocaleDateString('es-AR')  : '-';
+                         const ultAct = dcacRow?.Ult_act ? new Date(dcacRow.Ult_act).toLocaleDateString('es-AR') : '-';
+                         const qOps = dcacRow ? (Number(dcacRow.q_op_total) || 0) : 0;
+                         const ac = dcacRow?.asociado_comercial || dcacRow?.representante || '';
+                         
+                         return (
+                           <tr key={i} style={tieneCuenta ? {background: '#f0fdf4'} : {}}>
+                             <td>
+                               <div className="highlight">{r.razon_social_senasa || r.razon_social}</div>
+                               {tieneCuenta && dcacRow?.['st.razon_social'] && dcacRow['st.razon_social'] !== (r.razon_social_senasa || r.razon_social) && (
+                                 <div style={{fontSize: '11px', color: '#16a34a', marginTop: '4px'}}>dCaC: {dcacRow['st.razon_social']}</div>
+                               )}
+                             </td>
+                             <td><div className="metric" style={{fontSize:'12px'}}>{cuit}</div></td>
+                             <td><div className="metric">🐄 {Number(r.total_bovinos || 0).toLocaleString('es-AR')}</div></td>
+                             <td><span style={{color: '#64748b', fontSize: '13px'}}>{Number(r.total_vacas || 0).toLocaleString('es-AR')}</span></td>
+                             <td>
+                               <span className={`badge ${tieneCuenta ? 'badge-yes' : 'badge-outline'}`} style={{fontSize: '10px', background: tieneCuenta ? '#16a34a' : 'transparent', color: tieneCuenta ? '#fff' : '#64748b'}}>
+                                 {tieneCuenta ? 'SÍ' : 'NO'}
+                               </span>
+                             </td>
+                             <td>
+                               {ac
+                                 ? <div style={{fontSize:'12px', color: '#1d4ed8', fontWeight:500}}>{ac}</div>
+                                 : <span style={{color:'#94a3b8'}}>-</span>
+                               }
+                             </td>
+                             <td>
+                               {tieneCuenta && qOps > 0
+                                 ? <div className="metric" style={{color:'var(--accent)'}}>📈 {qOps.toLocaleString('es-AR')} op.</div>
+                                 : <span style={{color:'#94a3b8'}}>-</span>
+                               }
+                             </td>
+                             <td><span style={{fontWeight:500, fontSize:'12px', color: ultOp !== '-' ? '#0f172a' : '#cbd5e1'}}>{ultOp}</span></td>
+                             <td><span style={{fontWeight:500, fontSize:'12px', color: ultAct !== '-' ? '#475569' : '#cbd5e1'}}>{ultAct}</span></td>
+                           </tr>
+                         );
+                      })}
                    </tbody>
                  </table>
               </div>
