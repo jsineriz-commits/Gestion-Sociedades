@@ -48,19 +48,45 @@ function buildZonePalette(zonasOrdenadas=[]) {
 }
 
 // ─── Construir datos por depto ─────────────────────────────────────────
-function buildByDepto(data188) {
-  const m = {};
+// Si bcLookup disponible: agrega por DEPTO_ID (robusto)
+// Fallback: agrega por norm(nombre) (backward compat)
+function buildByDepto(data188, bcLookup, bcDeptOnly) {
+  const m = {}; // key = DEPTO_ID (número) o norm(dept) (string)
   (data188||[]).forEach(r => {
     const rawName = String(r.partido_establecimiento_senasa||r.partido_fiscal_senasa||'').trim();
     const rawProv = String(r.prov_establecimiento_senasa  ||r.prov_fiscal_senasa  ||'').trim();
     if (!rawName) return;
-    const key = norm(rawName);
+    const kt = parseFloat(r.total_bovinos)||0;
+    const kv = parseFloat(r.total_vacas)  ||0;
+
+    // Intentar match por ID primero
+    let key;
+    if (bcLookup) {
+      const normKey = norm(rawProv)+'|'+norm(rawName);
+      const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
+      key = id ? String(id) : norm(rawName);
+    } else {
+      key = norm(rawName);
+    }
+
     if (!m[key]) m[key] = {soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
     m[key].soc++;
-    m[key].kt += parseFloat(r.total_bovinos)||0;
-    m[key].kv += parseFloat(r.total_vacas)  ||0;
+    m[key].kt += kt;
+    m[key].kv += kv;
   });
-  return m;
+  return m; // key → {soc,kt,kv,name,prov}
+}
+
+// Obtener key de un feature GADM usando ID lookup o fallback a nombre
+function getFeatureKey(f, nameToId, normDeptToId) {
+  const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
+  const prov   = f.properties?.NAME_1||f.properties?.provincia_nombre||'';
+  if (nameToId) {
+    const idKey = norm(prov)+'|'+norm(nombre);
+    const id    = nameToId[idKey] || (normDeptToId && normDeptToId[norm(nombre)]);
+    if (id) return String(id);
+  }
+  return norm(nombre);
 }
 
 const fmt = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(Math.round(n));
@@ -81,9 +107,13 @@ function ModeBtn({label, active, onClick}) {
 // ─── Mapa Leaflet con capas diferenciadas ──────────────────────────────
 function LeafletMap({
   geojsonDeptos, geojsonProvs,
-  byDepto, zonaData, zonePalette,
+  byDepto, zonaData, deptoIds, zonePalette,
   filterMode, selectedKeys, onFeatureClick,
 }) {
+  // Helper interno: devuelve la key (DEPTO_ID como string, o norm(nombre)) para un feature
+  const fKey = useCallback((f) =>
+    getFeatureKey(f, deptoIds?.nameToId, deptoIds?.normDeptToId),
+  [deptoIds]);
   const cRef    = useRef(null);
   const mapR    = useRef(null);
   const LRef    = useRef(null);
@@ -125,26 +155,30 @@ function LeafletMap({
 
     const layer = L.geoJSON(geojsonDeptos, {
       pointToLayer: (f,ll) => {
-        const key = norm(f.properties?.NAME_2||f.properties?.nombre||'');
+        const key = fKey(f);
         const d = byDepto[key]; const soc=d?.soc||0; const sel=selectedKeys.has(key);
         const r = soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
         return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hCol(soc,maxSoc),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
       },
       style: (f) => {
-        const key = norm(f.properties?.NAME_2||f.properties?.nombre||'');
+        const key = fKey(f);
         const d = byDepto[key]; const soc=d?.soc||0; const sel=selectedKeys.has(key);
         return {
           fillColor: sel ? C.sel : hCol(soc,maxSoc),
-          weight: 0, // sin borde — el borde lo pone la capa de overlay
+          weight: 0,
           fillOpacity: 0.88,
         };
       },
       onEachFeature: (f,lyr) => {
         const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
         const prov   = f.properties?.NAME_1||f.properties?.provincia_nombre||'';
-        const key    = norm(nombre);
+        const key    = fKey(f);
         const d      = byDepto[key]; const soc=d?.soc||0; const kt=d?.kt||0;
-        const zona   = zonaData?.deptoMap?.[key]?.zona||'';
+        // Zona: preferir idToZona (match por ID), fallback a deptoMap por nombre
+        const numId  = Number(key);
+        const zona   = (numId && zonaData?.idToZona?.[numId])
+          || zonaData?.deptoMap?.[key]?.zona
+          || zonaData?.deptoMap?.[nombre.toUpperCase()]?.zona || '';
 
         lyr.on({
           click: () => onFeatureClick({key,nombre:d?.name||nombre,prov:d?.prov||prov,d:d||{soc:0,kt:0,kv:0},zona}),
@@ -236,13 +270,15 @@ function LeafletMap({
     if (filterMode!=='zonas'||!geojsonDeptos||!zonaData||!zonePalette) return;
 
     // Cada departamento tiene borde del color de su zona
-    // El grosor del borde hace visible el cambio de zona entre deptos vecinos
     const layer = L.geoJSON(geojsonDeptos, {
       pointToLayer:()=>null,
       style: (f) => {
+        const key    = fKey(f);
         const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
-        const key    = norm(nombre);
-        const zona   = zonaData?.deptoMap?.[key]?.zona;
+        const numId  = Number(key);
+        const zona   = (numId && zonaData?.idToZona?.[numId])
+          || zonaData?.deptoMap?.[key]?.zona
+          || zonaData?.deptoMap?.[nombre.toUpperCase()]?.zona;
         const col    = (zona && zonePalette[zona]) ? zonePalette[zona] : '#3a4a5a';
         const sel    = selectedKeys.has(key);
         return {
@@ -303,10 +339,11 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
   const [mapaData,    setMapaData]    = useState(null);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError,   setDataError]   = useState(null);
-  const [geojsonD,    setGeojsonD]    = useState(null);  // departamentos
-  const [geojsonP,    setGeojsonP]    = useState(null);  // provincias
+  const [geojsonD,    setGeojsonD]    = useState(null);
+  const [geojsonP,    setGeojsonP]    = useState(null);
   const [loadingGeo,  setLoadingGeo]  = useState(true);
   const [zonaData,    setZonaData]    = useState(null);
+  const [deptoIds,    setDeptoIds]    = useState(null); // {bcLookup, bcDeptOnly, nameToId, normDeptToId}
   const [filterMode,  setFilterMode]  = useState('provincias');
   const [activeInfo,  setActiveInfo]  = useState(null);
   const [isClient,    setIsClient]    = useState(false);
@@ -333,16 +370,22 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
     }).finally(()=>setLoadingGeo(false));
   },[]);
 
-  // Fetch zonas
+  // Fetch zonas y depto-ids en paralelo
   useEffect(()=>{
-    fetch('/api/zonas')
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{if(d&&!d.error)setZonaData(d);})
-      .catch(()=>{});
+    Promise.all([
+      fetch('/api/zonas').then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch('/api/depto-ids').then(r=>r.ok?r.json():null).catch(()=>null),
+    ]).then(([z, ids]) => {
+      if (z && !z.error)   setZonaData(z);
+      if (ids && !ids.error) setDeptoIds(ids);
+    });
   },[]);
 
   const data = (data188ext&&data188ext.length>0) ? data188ext : mapaData;
-  const byDepto = useMemo(()=>buildByDepto(data),[data]);
+  const byDepto = useMemo(
+    () => buildByDepto(data, deptoIds?.bcLookup, deptoIds?.bcDeptOnly),
+    [data, deptoIds]
+  );
   const selectedKeys = useMemo(()=>new Set((selectedDeptos||[]).map(d=>d.key)),[selectedDeptos]);
   const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[]),[zonaData]);
 
@@ -501,6 +544,7 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
             geojsonProvs={geojsonP}
             byDepto={byDepto}
             zonaData={zonaData}
+            deptoIds={deptoIds}
             zonePalette={zonePalette}
             filterMode={filterMode}
             selectedKeys={selectedKeys}
