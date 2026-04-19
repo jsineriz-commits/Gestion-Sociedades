@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeSheetData } from '../../../lib/sheets.js';
+import { createSpreadsheet } from '../../../lib/sheets.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -27,7 +27,7 @@ const COLS = [
   { key: 'q_ventas_cria',        label: 'Ventas Cría'               },
 ];
 
-const SHEET_NAME = 'GDS-Exportación';
+
 
 export async function POST(req) {
   try {
@@ -53,7 +53,12 @@ export async function POST(req) {
 
     const rows2D = [metaRow, header, ...dataRows];
 
-    const { url } = await writeSheetData(SHEET_NAME, rows2D);
+    // Título del nuevo archivo: incluye fecha y filtro activo
+    const fecha = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const filtroLabel = { todas:'Todas', bc:'Solo BC', dcac:'En dCaC', libres:'Cuentas Libres' }[filtro] || filtro;
+    const title = `GDS | ${filtroLabel} | ${fecha}`;
+
+    const { url } = await createSpreadsheet(title, rows2D);
     return NextResponse.json({ url, filas: filas.length });
   } catch (err) {
     console.error('[export-sociedades]', err.message);
