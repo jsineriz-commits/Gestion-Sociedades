@@ -3,23 +3,21 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
 // ─── Paleta UI ─────────────────────────────────────────────────────────
 const C = {
-  bg:       '#0f1923', surface:  '#1a2433', border:   '#2a3a4d',
-  brand:    '#3179a7', brandL:   '#4a9dcf', brandSub: 'rgba(49,121,167,0.18)',
-  text:     '#e2eaf2', textMuted:'#8fa8c0', textFaint:'#4d6a82',
-  positive: '#34c68e', posSub:   'rgba(52,198,142,0.15)',
-  warn:     '#f0a742', warnSub:  'rgba(240,167,66,0.15)',
-  danger:   '#e06060', sel:      '#60c4f0', selBg:    'rgba(96,196,240,0.22)',
-  // Escala de calor azul de marca
-  heat: ['#d4e9f7','#9ac8e8','#5fa8d3','#3179a7','#1d5a87','#0d3d62'],
+  bg:'#0f1923',surface:'#1a2433',border:'#2a3a4d',
+  brand:'#3179a7',brandL:'#4a9dcf',brandSub:'rgba(49,121,167,0.18)',
+  text:'#e2eaf2',textMuted:'#8fa8c0',textFaint:'#4d6a82',
+  positive:'#34c68e',posSub:'rgba(52,198,142,0.15)',
+  warn:'#f0a742',warnSub:'rgba(240,167,66,0.15)',
+  danger:'#e06060',sel:'#60c4f0',selBg:'rgba(96,196,240,0.22)',
+  heat:['#d4e9f7','#9ac8e8','#5fa8d3','#3179a7','#1d5a87','#0d3d62'],
 };
 
-// Colores vivos para zonas (hasta 24 zonas distintas)
 const ZONA_PAL = [
   '#f94144','#f3722c','#f9c74f','#90be6d','#43aa8b',
   '#4d908e','#277da1','#a8dadc','#e07a5f','#81b29a',
   '#e9c46a','#264653','#2a9d8f','#e76f51','#9b2226',
   '#ae2012','#bb3e03','#ca6702','#ee9b00','#94d2bd',
-  '#0a9396','#005f73','#001219','#e9d8a6',
+  '#0a9396','#005f73','#cc99bb','#e9d8a6',
 ];
 
 // ─── Normalización ─────────────────────────────────────────────────────
@@ -33,160 +31,220 @@ function norm(name) {
     .replace(/\s+/g,' ').trim();
 }
 
-// ─── Color calor ───────────────────────────────────────────────────────
-function hCol(soc, max) {
-  if (!soc || max===0) return '#14222f';
-  const t = Math.pow(soc/max, 0.45);
-  return C.heat[Math.min(C.heat.length-1, Math.floor(t*C.heat.length))];
+// ─── Abreviaturas de provincia en Q188 → nombre completo ───────────────
+const PROV_ABBR = {
+  'BUE':'BUENOS AIRES','BSAS':'BUENOS AIRES','PBA':'BUENOS AIRES',
+  'CAT':'CATAMARCA','CHA':'CHACO','CHU':'CHUBUT',
+  'CBA':'CORDOBA','COR':'CORRIENTES',
+  'ER':'ENTRE RIOS','RIOS':'ENTRE RIOS',
+  'FOR':'FORMOSA','JUJ':'JUJUY',
+  'LPA':'LA PAMPA','PAMPA':'LA PAMPA',
+  'LRI':'LA RIOJA','RIOJA':'LA RIOJA',
+  'MZA':'MENDOZA','MIS':'MISIONES',
+  'NEU':'NEUQUEN','RNG':'RIO NEGRO','NEGRO':'RIO NEGRO',
+  'SAL':'SALTA','SJU':'SAN JUAN','SLU':'SAN LUIS',
+  'SCR':'SANTA CRUZ','SF':'SANTA FE','SFE':'SANTA FE',
+  'SDE':'SANTIAGO DEL ESTERO','TDF':'TIERRA DEL FUEGO','TUC':'TUCUMAN',
+  'CABA':'CIUDAD AUTONOMA DE BUENOS AIRES',
+  'CAP':'CIUDAD AUTONOMA DE BUENOS AIRES',
+};
+function expandProv(raw) {
+  const u = String(raw||'').trim().toUpperCase();
+  return PROV_ABBR[u] || u;
 }
 
-// ─── Paleta de zonas (asigna color único por zona) ─────────────────────
+// ─── Color calor ───────────────────────────────────────────────────────
+function hCol(soc,max) {
+  if (!soc||max===0) return '#14222f';
+  const t = Math.pow(soc/max,0.45);
+  return C.heat[Math.min(C.heat.length-1,Math.floor(t*C.heat.length))];
+}
+
 function buildZonePalette(zonasOrdenadas=[]) {
-  const p = {};
-  zonasOrdenadas.forEach((z,i) => { p[z] = ZONA_PAL[i % ZONA_PAL.length]; });
+  const p={};
+  zonasOrdenadas.forEach((z,i)=>{p[z]=ZONA_PAL[i%ZONA_PAL.length];});
   return p;
 }
 
 // ─── Construir datos por depto ─────────────────────────────────────────
-// Si bcLookup disponible: agrega por DEPTO_ID (robusto)
-// Fallback: agrega por norm(nombre) (backward compat)
+// Agrega por DEPTO_ID cuando está disponible via bcLookup (robusto)
+// Fallback: agrega por norm(nombre) con prov expandida
 function buildByDepto(data188, bcLookup, bcDeptOnly) {
-  const m = {}; // key = DEPTO_ID (número) o norm(dept) (string)
-  (data188||[]).forEach(r => {
+  const m={};
+  (data188||[]).forEach(r=>{
     const rawName = String(r.partido_establecimiento_senasa||r.partido_fiscal_senasa||'').trim();
     const rawProv = String(r.prov_establecimiento_senasa  ||r.prov_fiscal_senasa  ||'').trim();
     if (!rawName) return;
-    const kt = parseFloat(r.total_bovinos)||0;
-    const kv = parseFloat(r.total_vacas)  ||0;
+    const kt=parseFloat(r.total_bovinos)||0;
+    const kv=parseFloat(r.total_vacas)  ||0;
 
-    // Intentar match por ID primero
     let key;
     if (bcLookup) {
-      const normKey = norm(rawProv)+'|'+norm(rawName);
+      // Expandir abreviatura: "BUE" → "BUENOS AIRES" para match con BC-ID sheet
+      const fullProv = expandProv(rawProv);
+      const normKey  = norm(fullProv)+'|'+norm(rawName);
       const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
       key = id ? String(id) : norm(rawName);
     } else {
       key = norm(rawName);
     }
 
-    if (!m[key]) m[key] = {soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
+    if (!m[key]) m[key]={soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
     m[key].soc++;
-    m[key].kt += kt;
-    m[key].kv += kv;
+    m[key].kt+=kt;
+    m[key].kv+=kv;
   });
-  return m; // key → {soc,kt,kv,name,prov}
+  return m;
 }
 
-// Obtener key de un feature GADM usando ID lookup o fallback a nombre
-function getFeatureKey(f, nameToId, normDeptToId) {
-  const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
-  const prov   = f.properties?.NAME_1||f.properties?.provincia_nombre||'';
+// ─── Centroide simple de feature GeoJSON ──────────────────────────────
+function computeCentroid(feature) {
+  let sumLat=0,sumLng=0,cnt=0;
+  function scan(c) {
+    if (typeof c[0]==='number'){sumLng+=c[0];sumLat+=c[1];cnt++;}
+    else c.forEach(scan);
+  }
+  try{scan(feature.geometry.coordinates);}catch{}
+  return cnt>0?{lat:sumLat/cnt,lng:sumLng/cnt}:null;
+}
+
+// ─── Nearest-neighbor: GADM centroid → DEPTO_ID ───────────────────────
+function findNearestId(centroid, mergeCoords) {
+  if (!centroid||!mergeCoords?.length) return null;
+  let best=null,bestD=Infinity;
+  for (const m of mergeCoords) {
+    const d=(centroid.lat-m.lat)**2+(centroid.lng-m.lng)**2;
+    if (d<bestD){bestD=d;best=m.id;}
+  }
+  return best;
+}
+
+// Construir mapa GID_2 → DEPTO_ID por coordenadas (una sola vez)
+function buildGadmToId(geojson, mergeCoords) {
+  const map={};
+  if (!geojson||!mergeCoords?.length) return map;
+  for (const f of geojson.features) {
+    const gid=f.properties?.GID_2||f.properties?.gid;
+    if (!gid) continue;
+    const c=computeCentroid(f);
+    const id=findNearestId(c,mergeCoords);
+    if (id) map[String(gid)]=String(id);
+  }
+  return map;
+}
+
+// ─── Resolver key de un feature ────────────────────────────────────────
+// 1. gadmToId (coordenadas) → más preciso, no depende de nombres
+// 2. nameToId (nombres del Merge sheet) → fallback
+// 3. norm(nombre) → último recurso
+function getFeatureKey(f, gadmToId, nameToId, normDeptToId) {
+  const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
+  const prov  =f.properties?.NAME_1||f.properties?.provincia_nombre||'';
+
+  const gid=f.properties?.GID_2||f.properties?.gid;
+  if (gid&&gadmToId?.[String(gid)]) return gadmToId[String(gid)];
+
   if (nameToId) {
-    const idKey = norm(prov)+'|'+norm(nombre);
-    const id    = nameToId[idKey] || (normDeptToId && normDeptToId[norm(nombre)]);
+    const idKey=norm(prov)+'|'+norm(nombre);
+    const id=nameToId[idKey]||(normDeptToId&&normDeptToId[norm(nombre)]);
     if (id) return String(id);
   }
   return norm(nombre);
 }
 
-const fmt = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(Math.round(n));
+const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(Math.round(n));
 
-// ─── Botón de modo ─────────────────────────────────────────────────────
-function ModeBtn({label, active, onClick}) {
+function ModeBtn({label,active,onClick}) {
   return (
     <button onClick={onClick} style={{
-      padding:'7px 18px', borderRadius:8,
+      padding:'7px 18px',borderRadius:8,
       border:`1px solid ${active?C.brand:C.border}`,
-      background: active ? C.brandSub : 'transparent',
-      color: active ? C.brandL : C.textMuted,
-      fontWeight: active?700:400, fontSize:13, cursor:'pointer', transition:'all .15s',
+      background:active?C.brandSub:'transparent',
+      color:active?C.brandL:C.textMuted,
+      fontWeight:active?700:400,fontSize:13,cursor:'pointer',transition:'all .15s',
     }}>{label}</button>
   );
 }
 
-// ─── Mapa Leaflet con capas diferenciadas ──────────────────────────────
+// ─── Componente Leaflet ────────────────────────────────────────────────
 function LeafletMap({
-  geojsonDeptos, geojsonProvs,
-  byDepto, zonaData, deptoIds, zonePalette,
-  filterMode, selectedKeys, onFeatureClick,
+  geojsonDeptos,geojsonProvs,
+  byDepto,zonaData,gadmToId,zonePalette,
+  filterMode,selectedKeys,onFeatureClick,
 }) {
-  // Helper interno: devuelve la key (DEPTO_ID como string, o norm(nombre)) para un feature
-  const fKey = useCallback((f) =>
-    getFeatureKey(f, deptoIds?.nameToId, deptoIds?.normDeptToId),
-  [deptoIds]);
-  const cRef    = useRef(null);
-  const mapR    = useRef(null);
-  const LRef    = useRef(null);
-  // Capas separadas
-  const lyrHeatR  = useRef(null); // fill heatmap (siempre)
-  const lyrProvR  = useRef(null); // overlay provincias (modo provincias)
-  const lyrZonaR  = useRef(null); // overlay bordes zona (modo zonas)
-  const lyrDeptR  = useRef(null); // overlay bordes depto (modo departamentos)
+  const deptoIds_nameToId    = useRef(null);
+  const deptoIds_normDeptToId = useRef(null);
 
-  const maxSoc = useMemo(
-    () => Math.max(...Object.values(byDepto).map(d=>d.soc),1),
-    [byDepto]
-  );
+  // fKey: resuelve key para un feature GADM
+  const fKey = useCallback((f)=>getFeatureKey(f,gadmToId,deptoIds_nameToId.current,deptoIds_normDeptToId.current),[gadmToId]);
+
+  const cRef   = useRef(null);
+  const mapR   = useRef(null);
+  const LRef   = useRef(null);
+  const lyrHeatR = useRef(null);
+  const lyrProvR = useRef(null);
+  const lyrZonaR = useRef(null);
+  const lyrDeptR = useRef(null);
+
+  const maxSoc = useMemo(()=>Math.max(...Object.values(byDepto).map(d=>d.soc),1),[byDepto]);
+
+  // Resolver zona por key (proba numeric ID → deptoMap por nombre)
+  const getZona = useCallback((key,nombre)=>{
+    const numId=Number(key);
+    return (numId&&zonaData?.idToZona?.[numId])
+      ||zonaData?.deptoMap?.[key]?.zona
+      ||zonaData?.deptoMap?.[nombre?.toUpperCase()]?.zona
+      ||'';
+  },[zonaData]);
 
   // ── Init map ───────────────────────────────────────────────────────
-  useEffect(() => {
-    async function init() {
-      if (!cRef.current || mapR.current) return;
-      const L = (await import('leaflet')).default;
-      LRef.current = L;
+  useEffect(()=>{
+    async function init(){
+      if(!cRef.current||mapR.current) return;
+      const L=(await import('leaflet')).default;
+      LRef.current=L;
       await import('leaflet/dist/leaflet.css');
-      const map = L.map(cRef.current, {
-        center:[-37.5,-64.5], zoom:4, zoomControl:false, preferCanvas:false,
-      });
-      mapR.current = map;
+      const map=L.map(cRef.current,{center:[-37.5,-64.5],zoom:4,zoomControl:false,preferCanvas:false});
+      mapR.current=map;
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-        {attribution:'&copy; CARTO', subdomains:'abcd', maxZoom:19}).addTo(map);
+        {attribution:'&copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
       L.control.zoom({position:'topright'}).addTo(map);
     }
     init();
-    return () => { if (mapR.current){mapR.current.remove();mapR.current=null;} };
-  }, []);
+    return()=>{if(mapR.current){mapR.current.remove();mapR.current=null;}};
+  },[]);
 
-  // ── Capa HEATMAP (fill siempre visible, interacción) ───────────────
-  useEffect(() => {
-    const map = mapR.current, L = LRef.current;
-    if (!map||!L||!geojsonDeptos) return;
-    if (lyrHeatR.current){lyrHeatR.current.remove();lyrHeatR.current=null;}
+  // ── Capa HEATMAP ──────────────────────────────────────────────────
+  useEffect(()=>{
+    const map=mapR.current,L=LRef.current;
+    if(!map||!L||!geojsonDeptos) return;
+    if(lyrHeatR.current){lyrHeatR.current.remove();lyrHeatR.current=null;}
 
-    const layer = L.geoJSON(geojsonDeptos, {
-      pointToLayer: (f,ll) => {
-        const key = fKey(f);
-        const d = byDepto[key]; const soc=d?.soc||0; const sel=selectedKeys.has(key);
-        const r = soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
+    const layer=L.geoJSON(geojsonDeptos,{
+      pointToLayer:(f,ll)=>{
+        const key=fKey(f);
+        const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
+        const r=soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
         return L.circleMarker(ll,{radius:r,fillColor:sel?C.sel:hCol(soc,maxSoc),color:'rgba(0,0,0,0.2)',weight:0.4,fillOpacity:soc>0?0.88:0.2});
       },
-      style: (f) => {
-        const key = fKey(f);
-        const d = byDepto[key]; const soc=d?.soc||0; const sel=selectedKeys.has(key);
-        return {
-          fillColor: sel ? C.sel : hCol(soc,maxSoc),
-          weight: 0,
-          fillOpacity: 0.88,
-        };
+      style:(f)=>{
+        const key=fKey(f);
+        const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
+        return{fillColor:sel?C.sel:hCol(soc,maxSoc),weight:0,fillOpacity:0.88};
       },
-      onEachFeature: (f,lyr) => {
-        const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
-        const prov   = f.properties?.NAME_1||f.properties?.provincia_nombre||'';
-        const key    = fKey(f);
-        const d      = byDepto[key]; const soc=d?.soc||0; const kt=d?.kt||0;
-        // Zona: preferir idToZona (match por ID), fallback a deptoMap por nombre
-        const numId  = Number(key);
-        const zona   = (numId && zonaData?.idToZona?.[numId])
-          || zonaData?.deptoMap?.[key]?.zona
-          || zonaData?.deptoMap?.[nombre.toUpperCase()]?.zona || '';
+      onEachFeature:(f,lyr)=>{
+        const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
+        const prov  =f.properties?.NAME_1||f.properties?.provincia_nombre||'';
+        const key   =fKey(f);
+        const d     =byDepto[key];const soc=d?.soc||0;const kt=d?.kt||0;
+        const zona  =getZona(key,nombre);
+        const zCol  =zona&&zonePalette?.[zona]?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${zonePalette[zona]};margin-right:4px"></span>${zona}`:'';
 
         lyr.on({
-          click: () => onFeatureClick({key,nombre:d?.name||nombre,prov:d?.prov||prov,d:d||{soc:0,kt:0,kv:0},zona}),
-          mouseover: e => { e.target.setStyle({fillOpacity:1}); e.target.bringToFront(); },
-          mouseout:  e => { layer.resetStyle(e.target); },
+          click:()=>onFeatureClick({key,nombre:d?.name||nombre,prov:d?.prov||prov,d:d||{soc:0,kt:0,kv:0},zona}),
+          mouseover:e=>{e.target.setStyle({fillOpacity:1});e.target.bringToFront();},
+          mouseout: e=>{layer.resetStyle(e.target);},
         });
-
-        const zCol = zona&&zonePalette?.[zona] ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${zonePalette[zona]};margin-right:4px"></span>${zona}` : '';
         lyr.bindTooltip(
           `<div style="font-family:system-ui;padding:2px 4px">
             <div style="font-weight:700;font-size:13px;color:${C.text}">${d?.name||nombre}</div>
@@ -201,132 +259,120 @@ function LeafletMap({
         );
       },
     }).addTo(map);
-    lyrHeatR.current = layer;
-  }, [geojsonDeptos, byDepto, zonaData, zonePalette, selectedKeys, onFeatureClick, maxSoc]);
+    lyrHeatR.current=layer;
+  },[geojsonDeptos,byDepto,zonaData,zonePalette,selectedKeys,onFeatureClick,maxSoc,fKey,getZona]);
 
-  // ── Capa BORDES DEPARTAMENTOS (modo departamentos) ─────────────────
-  useEffect(() => {
-    const map = mapR.current, L = LRef.current;
-    if (!map||!L) return;
-    if (lyrDeptR.current){lyrDeptR.current.remove();lyrDeptR.current=null;}
-    if (filterMode!=='departamentos'||!geojsonDeptos) return;
-
-    const layer = L.geoJSON(geojsonDeptos, {
-      pointToLayer: ()=>null,
-      style: (f) => {
-        const key = norm(f.properties?.NAME_2||f.properties?.nombre||'');
-        const sel = selectedKeys.has(key);
-        return {
-          fillColor:'transparent', fillOpacity:0,
-          color: sel ? '#fff' : '#7a9ab5',
-          weight: sel ? 2 : 0.6,
-        };
+  // ── Capa bordes DEPARTAMENTOS ─────────────────────────────────────
+  useEffect(()=>{
+    const map=mapR.current,L=LRef.current;
+    if(!map||!L) return;
+    if(lyrDeptR.current){lyrDeptR.current.remove();lyrDeptR.current=null;}
+    if(filterMode!=='departamentos'||!geojsonDeptos) return;
+    const layer=L.geoJSON(geojsonDeptos,{
+      pointToLayer:()=>null,
+      style:(f)=>{
+        const key=fKey(f);const sel=selectedKeys.has(key);
+        return{fillColor:'transparent',fillOpacity:0,color:sel?'#fff':'#7a9ab5',weight:sel?2:0.6};
       },
-      interactive: false,
+      interactive:false,
     }).addTo(map);
-    lyrDeptR.current = layer;
-  }, [geojsonDeptos, filterMode, selectedKeys]);
+    lyrDeptR.current=layer;
+  },[geojsonDeptos,filterMode,selectedKeys,fKey]);
 
-  // ── Capa OVERLAY PROVINCIAS (modo provincias) ──────────────────────
-  useEffect(() => {
-    const map = mapR.current, L = LRef.current;
-    if (!map||!L) return;
-    if (lyrProvR.current){lyrProvR.current.remove();lyrProvR.current=null;}
-    // Modo provincias: borde depto fino + overlay de provincia blanco grueso
-    if (filterMode==='provincias') {
-      const sublayers = [];
-
-      // Capa de bordes departamentales finos
-      if (geojsonDeptos) {
-        const dLayer = L.geoJSON(geojsonDeptos,{
+  // ── Capa overlay PROVINCIAS ──────────────────────────────────────
+  useEffect(()=>{
+    const map=mapR.current,L=LRef.current;
+    if(!map||!L) return;
+    if(lyrProvR.current){lyrProvR.current.remove();lyrProvR.current=null;}
+    if(filterMode==='provincias'){
+      const sublayers=[];
+      if(geojsonDeptos){
+        sublayers.push(L.geoJSON(geojsonDeptos,{
           pointToLayer:()=>null,
           style:()=>({fillColor:'transparent',fillOpacity:0,color:'#7a9ab5',weight:0.4}),
           interactive:false,
-        }).addTo(map);
-        sublayers.push(dLayer);
+        }).addTo(map));
       }
-
-      // Capa de bordes provinciales (blanco grueso, sin relleno)
-      if (geojsonProvs) {
-        const pLayer = L.geoJSON(geojsonProvs,{
+      if(geojsonProvs){
+        sublayers.push(L.geoJSON(geojsonProvs,{
           pointToLayer:()=>null,
           style:()=>({fillColor:'transparent',fillOpacity:0,color:'#ffffff',weight:3,opacity:0.9}),
           interactive:false,
-        }).addTo(map);
-        sublayers.push(pLayer);
+        }).addTo(map));
       }
-
-      if (sublayers.length > 0) {
-        lyrProvR.current = { remove: () => sublayers.forEach(l => l.remove()) };
-      }
+      if(sublayers.length>0) lyrProvR.current={remove:()=>sublayers.forEach(l=>l.remove())};
     }
-  }, [geojsonDeptos, geojsonProvs, filterMode, selectedKeys]);
+  },[geojsonDeptos,geojsonProvs,filterMode,selectedKeys]);
 
-  // ── Capa OVERLAY ZONAS (modo zonas) ───────────────────────────────
-  useEffect(() => {
-    const map = mapR.current, L = LRef.current;
-    if (!map||!L) return;
-    if (lyrZonaR.current){lyrZonaR.current.remove();lyrZonaR.current=null;}
-    if (filterMode!=='zonas'||!geojsonDeptos||!zonaData||!zonePalette) return;
-
-    // Cada departamento tiene borde del color de su zona
-    const layer = L.geoJSON(geojsonDeptos, {
+  // ── Capa overlay ZONAS ────────────────────────────────────────────
+  useEffect(()=>{
+    const map=mapR.current,L=LRef.current;
+    if(!map||!L) return;
+    if(lyrZonaR.current){lyrZonaR.current.remove();lyrZonaR.current=null;}
+    if(filterMode!=='zonas'||!geojsonDeptos||!zonaData||!zonePalette) return;
+    const layer=L.geoJSON(geojsonDeptos,{
       pointToLayer:()=>null,
-      style: (f) => {
-        const key    = fKey(f);
-        const nombre = f.properties?.NAME_2||f.properties?.nombre||'';
-        const numId  = Number(key);
-        const zona   = (numId && zonaData?.idToZona?.[numId])
-          || zonaData?.deptoMap?.[key]?.zona
-          || zonaData?.deptoMap?.[nombre.toUpperCase()]?.zona;
-        const col    = (zona && zonePalette[zona]) ? zonePalette[zona] : '#3a4a5a';
-        const sel    = selectedKeys.has(key);
-        return {
-          fillColor:'transparent', fillOpacity:0,
-          color: sel ? '#fff' : col,
-          weight: sel ? 3 : 1.8,
-          opacity: sel ? 1 : 0.85,
-        };
+      style:(f)=>{
+        const key=fKey(f);
+        const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
+        const zona=getZona(key,nombre);
+        const col=(zona&&zonePalette[zona])?zonePalette[zona]:'#3a4a5a';
+        const sel=selectedKeys.has(key);
+        return{fillColor:'transparent',fillOpacity:0,color:sel?'#fff':col,weight:sel?3:1.8,opacity:sel?1:0.85};
       },
-      interactive: false,
+      interactive:false,
     }).addTo(map);
-    lyrZonaR.current = layer;
-  }, [geojsonDeptos, filterMode, zonaData, zonePalette, selectedKeys]);
+    lyrZonaR.current=layer;
+  },[geojsonDeptos,filterMode,zonaData,zonePalette,selectedKeys,fKey,getZona]);
 
-  return <div ref={cRef} style={{height:'100%',width:'100%'}} />;
+  return <div ref={cRef} style={{height:'100%',width:'100%'}}/>;
 }
 
-// ─── Panel lateral de zonas ────────────────────────────────────────────
-function ZonaPanel({zonaData, byDepto, selectedDeptos, selectedKeys, onDeptoFilter, zonePalette}) {
+// ─── Panel de zonas ────────────────────────────────────────────────────
+function ZonaPanel({zonaData,byDepto,selectedDeptos,selectedKeys,onDeptoFilter,zonePalette}) {
   return (
     <div style={{width:230,background:C.surface,borderRight:`1px solid ${C.border}`,overflowY:'auto',padding:'12px 0'}}>
-      <p style={{padding:'0 14px',margin:'0 0 10px',fontSize:11,fontWeight:700,color:C.textFaint,textTransform:'uppercase',letterSpacing:'0.08em'}}>Zonas</p>
-      {(zonaData?.zonasOrdenadas||[]).map((zona,i) => {
-        const col = zonePalette?.[zona]||C.brand;
-        const deptosZona = Object.keys(byDepto).filter(k=>zonaData.deptoMap?.[k]?.zona===zona);
-        const allSel  = deptosZona.length>0 && deptosZona.every(k=>selectedKeys.has(k));
-        const someSel = !allSel && deptosZona.some(k=>selectedKeys.has(k));
-        const cnt = deptosZona.reduce((a,k)=>a+(byDepto[k]?.soc||0),0);
-        const resp = zonaData?.zonasConResp?.[zona]||'';
+      <p style={{padding:'0 14px',margin:'0 0 10px',fontSize:11,fontWeight:700,color:C.textFaint,textTransform:'uppercase',letterSpacing:'0.08em'}}>
+        Zonas ({(zonaData?.zonasOrdenadas||[]).length})
+      </p>
+      {(zonaData?.zonasOrdenadas||[]).map(zona=>{
+        const col=zonePalette?.[zona]||C.brand;
+        // Buscar deptos por nombre (zonaData.deptoMap clave = nombre en mayúsculas)
+        // Y por ID numérico en idToInfo
+        const deptosZona=Object.keys(byDepto).filter(k=>{
+          const numId=Number(k);
+          if(numId&&zonaData?.idToZona?.[numId]) return zonaData.idToZona[numId]===zona;
+          return zonaData?.deptoMap?.[k]?.zona===zona;
+        });
+        const allSel=deptosZona.length>0&&deptosZona.every(k=>selectedKeys.has(k));
+        const someSel=!allSel&&deptosZona.some(k=>selectedKeys.has(k));
+        const cnt=deptosZona.reduce((a,k)=>a+(byDepto[k]?.soc||0),0);
+        const resp=zonaData?.zonasConResp?.[zona]||'';
+        const base=zonaData?.zonaBase?.[zona]||'';
         return (
-          <button key={zona} onClick={() => {
-            const newSel = allSel
-              ? (selectedDeptos||[]).filter(x=>zonaData.deptoMap?.[x.key]?.zona!==zona)
-              : [...(selectedDeptos||[]), ...deptosZona.filter(k=>!selectedKeys.has(k))
+          <button key={zona} onClick={()=>{
+            const newSel=allSel
+              ?(selectedDeptos||[]).filter(x=>{
+                  const ni=Number(x.key);
+                  const z=ni?zonaData?.idToZona?.[ni]:zonaData?.deptoMap?.[x.key]?.zona;
+                  return z!==zona;
+                })
+              :[...(selectedDeptos||[]),...deptosZona.filter(k=>!selectedKeys.has(k))
                   .map(k=>({key:k,name:byDepto[k].name,prov:byDepto[k].prov,d:byDepto[k],zona}))];
             onDeptoFilter?.(newSel);
           }} style={{
             display:'block',width:'100%',textAlign:'left',padding:'8px 14px',
             border:'none',borderLeft:`4px solid ${allSel||someSel?col:'transparent'}`,
-            background: allSel?`${col}22`:someSel?`${col}11`:'transparent',
+            background:allSel?`${col}22`:someSel?`${col}11`:'transparent',
             cursor:'pointer',transition:'all .12s',
           }}>
             <div style={{display:'flex',alignItems:'center',gap:7}}>
               <div style={{width:10,height:10,borderRadius:2,background:col,flexShrink:0}}/>
-              <span style={{fontSize:13,fontWeight:allSel?700:400,color:allSel?C.text:someSel?C.textMuted:C.textFaint}}>{zona}</span>
-              {cnt>0&&<span style={{marginLeft:'auto',fontSize:10,color:C.textFaint,background:C.bg,borderRadius:99,padding:'1px 6px'}}>{cnt.toLocaleString()}</span>}
+              <span style={{fontSize:12,fontWeight:allSel?700:400,color:allSel?C.text:someSel?C.textMuted:C.textFaint,lineHeight:1.3}}>{zona}</span>
+              {cnt>0&&<span style={{marginLeft:'auto',fontSize:10,color:C.textFaint,background:C.bg,borderRadius:99,padding:'1px 6px',flexShrink:0}}>{cnt.toLocaleString()}</span>}
             </div>
-            {resp&&<div style={{fontSize:10,color:C.textFaint,marginTop:1,paddingLeft:17}}>{resp}</div>}
+            {resp&&<div style={{fontSize:10,color:C.textFaint,marginTop:2,paddingLeft:17}}>{resp}</div>}
+            {base&&<div style={{fontSize:9,color:C.textFaint,marginTop:1,paddingLeft:17,opacity:0.7}}>{base}</div>}
           </button>
         );
       })}
@@ -335,7 +381,7 @@ function ZonaPanel({zonaData, byDepto, selectedDeptos, selectedKeys, onDeptoFilt
 }
 
 // ─── Componente principal ──────────────────────────────────────────────
-export default function MapaTab({data188ext, data189, selectedDeptos=[], onDeptoFilter}) {
+export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFilter}) {
   const [mapaData,    setMapaData]    = useState(null);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError,   setDataError]   = useState(null);
@@ -343,7 +389,8 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
   const [geojsonP,    setGeojsonP]    = useState(null);
   const [loadingGeo,  setLoadingGeo]  = useState(true);
   const [zonaData,    setZonaData]    = useState(null);
-  const [deptoIds,    setDeptoIds]    = useState(null); // {bcLookup, bcDeptOnly, nameToId, normDeptToId}
+  const [deptoIds,    setDeptoIds]    = useState(null);
+  const [gadmToId,    setGadmToId]    = useState({}); // GID_2 → DEPTO_ID_str
   const [filterMode,  setFilterMode]  = useState('provincias');
   const [activeInfo,  setActiveInfo]  = useState(null);
   const [isClient,    setIsClient]    = useState(false);
@@ -359,7 +406,7 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
       .finally(()=>setLoadingData(false));
   },[]);
 
-  // Fetch GeoJSON departamentos + provincias en paralelo
+  // Fetch GeoJSON
   useEffect(()=>{
     Promise.all([
       fetch('/deptos.geojson').then(r=>r.ok?r.json():null).catch(()=>null),
@@ -370,103 +417,137 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
     }).finally(()=>setLoadingGeo(false));
   },[]);
 
-  // Fetch zonas y depto-ids en paralelo
+  // Fetch zonas + depto-ids
   useEffect(()=>{
     Promise.all([
       fetch('/api/zonas').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch('/api/depto-ids').then(r=>r.ok?r.json():null).catch(()=>null),
-    ]).then(([z, ids]) => {
-      if (z && !z.error)   setZonaData(z);
-      if (ids && !ids.error) setDeptoIds(ids);
+    ]).then(([z,ids])=>{
+      if(z&&!z.error)   setZonaData(z);
+      if(ids&&!ids.error) setDeptoIds(ids);
     });
   },[]);
 
-  const data = (data188ext&&data188ext.length>0) ? data188ext : mapaData;
-  const byDepto = useMemo(
-    () => buildByDepto(data, deptoIds?.bcLookup, deptoIds?.bcDeptOnly),
-    [data, deptoIds]
-  );
+  // Construir gadmToId por coordenadas cuando ambos datasets están listos
+  useEffect(()=>{
+    if(!geojsonD||!deptoIds?.mergeCoords?.length) return;
+    // Ejecutar en next tick para no bloquear el render
+    const id=setTimeout(()=>{
+      const map=buildGadmToId(geojsonD,deptoIds.mergeCoords);
+      setGadmToId(map);
+      console.log(`[gadmToId] ${Object.keys(map).length} features mapeados por coordenadas`);
+    },0);
+    return()=>clearTimeout(id);
+  },[geojsonD,deptoIds]);
+
+  const data    = (data188ext&&data188ext.length>0)?data188ext:mapaData;
+  const byDepto = useMemo(()=>buildByDepto(data,deptoIds?.bcLookup,deptoIds?.bcDeptOnly),[data,deptoIds]);
   const selectedKeys = useMemo(()=>new Set((selectedDeptos||[]).map(d=>d.key)),[selectedDeptos]);
   const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[]),[zonaData]);
 
+  // Resolver zona para una key (ID numerico o nombre)
+  const getZonaForKey = useCallback((key,zona='')=>{
+    if(zona) return zona;
+    const numId=Number(key);
+    return (numId&&zonaData?.idToZona?.[numId])||zonaData?.deptoMap?.[key]?.zona||'';
+  },[zonaData]);
+
   const handleFeatureClick = useCallback(({key,nombre,prov,d,zona})=>{
-    let newSelected = [...(selectedDeptos||[])];
-    if (filterMode==='departamentos') {
-      newSelected = selectedKeys.has(key)
-        ? newSelected.filter(x=>x.key!==key)
-        : [...newSelected,{key,name:nombre,prov,d,zona}];
-    } else if (filterMode==='provincias') {
-      const targetProv = zonaData?.deptoMap?.[key]?.provincia||norm(prov);
-      const deptosOfProv = Object.entries(byDepto)
+    const resolvedZona = getZonaForKey(key,zona);
+    let newSelected=[...(selectedDeptos||[])];
+
+    if(filterMode==='departamentos'){
+      newSelected=selectedKeys.has(key)
+        ?newSelected.filter(x=>x.key!==key)
+        :[...newSelected,{key,name:nombre,prov,d,zona:resolvedZona}];
+    } else if(filterMode==='provincias'){
+      // Resolución de provincia por ID si disponible
+      const numId=Number(key);
+      const targetProv=(numId&&deptoIds?.idToInfo?.[numId]?.prov)
+        ||zonaData?.idToInfo?.[numId]?.provincia
+        ||zonaData?.deptoMap?.[key]?.provincia||norm(prov);
+      const deptosOfProv=Object.entries(byDepto)
         .filter(([k,v])=>{
-          const info=zonaData?.deptoMap?.[k];
-          return info ? info.provincia===targetProv : norm(v.prov)===targetProv;
+          const ni=Number(k);
+          const kProv=ni
+            ?(deptoIds?.idToInfo?.[ni]?.prov||zonaData?.idToInfo?.[ni]?.provincia)
+            :(zonaData?.deptoMap?.[k]?.provincia||norm(v.prov||''));
+          return kProv===targetProv;
         })
-        .map(([k,v])=>({key:k,name:v.name,prov:v.prov,d:v,zona:zonaData?.deptoMap?.[k]?.zona||''}));
-      const allSel = deptosOfProv.every(x=>selectedKeys.has(x.key));
-      if (allSel) {
-        newSelected = newSelected.filter(x=>{
-          const p=zonaData?.deptoMap?.[x.key]?.provincia||norm(x.prov||'');
+        .map(([k,v])=>({key:k,name:v.name,prov:v.prov,d:v,zona:getZonaForKey(k)}));
+      const allSel=deptosOfProv.every(x=>selectedKeys.has(x.key));
+      if(allSel){
+        newSelected=newSelected.filter(x=>{
+          const ni=Number(x.key);
+          const p=ni
+            ?(deptoIds?.idToInfo?.[ni]?.prov||zonaData?.idToInfo?.[ni]?.provincia)
+            :(zonaData?.deptoMap?.[x.key]?.provincia||norm(x.prov||''));
           return p!==targetProv;
         });
       } else {
-        const ex = new Set(newSelected.map(x=>x.key));
+        const ex=new Set(newSelected.map(x=>x.key));
         deptosOfProv.forEach(x=>{if(!ex.has(x.key))newSelected.push(x);});
       }
-    } else if (filterMode==='zonas') {
-      const targetZona = zonaData?.deptoMap?.[key]?.zona||zona;
-      if (!targetZona) return;
-      const deptosOfZona = Object.entries(byDepto)
-        .filter(([k])=>zonaData?.deptoMap?.[k]?.zona===targetZona)
+    } else if(filterMode==='zonas'){
+      const targetZona=resolvedZona;
+      if(!targetZona) return;
+      const deptosOfZona=Object.entries(byDepto)
+        .filter(([k])=>{
+          const ni=Number(k);
+          return ni
+            ?(zonaData?.idToZona?.[ni]===targetZona)
+            :(zonaData?.deptoMap?.[k]?.zona===targetZona);
+        })
         .map(([k,v])=>({key:k,name:v.name,prov:v.prov,d:v,zona:targetZona}));
-      const allSel = deptosOfZona.every(x=>selectedKeys.has(x.key));
-      if (allSel) {
-        newSelected = newSelected.filter(x=>zonaData?.deptoMap?.[x.key]?.zona!==targetZona);
+      const allSel=deptosOfZona.every(x=>selectedKeys.has(x.key));
+      if(allSel){
+        newSelected=newSelected.filter(x=>{
+          const ni=Number(x.key);
+          return ni?(zonaData?.idToZona?.[ni]!==targetZona):(zonaData?.deptoMap?.[x.key]?.zona!==targetZona);
+        });
       } else {
-        const ex = new Set(newSelected.map(x=>x.key));
+        const ex=new Set(newSelected.map(x=>x.key));
         deptosOfZona.forEach(x=>{if(!ex.has(x.key))newSelected.push(x);});
       }
     }
     onDeptoFilter?.(newSelected);
-    setActiveInfo({key,nombre,prov,d,zona:zonaData?.deptoMap?.[key]?.zona||zona||''});
-  },[filterMode,selectedKeys,selectedDeptos,byDepto,zonaData,onDeptoFilter]);
+    setActiveInfo({key,nombre,prov,d,zona:resolvedZona});
+  },[filterMode,selectedKeys,selectedDeptos,byDepto,zonaData,deptoIds,onDeptoFilter,getZonaForKey]);
 
-  const totalSoc = selectedDeptos.length>0
-    ? selectedDeptos.reduce((a,d)=>a+(d.d?.soc||0),0)
-    : (data?.length||0);
-  const totalDep = selectedDeptos.length>0 ? selectedDeptos.length : Object.keys(byDepto).length;
-  const loading  = loadingData||loadingGeo;
+  const totalSoc=selectedDeptos.length>0
+    ?selectedDeptos.reduce((a,d)=>a+(d.d?.soc||0),0)
+    :(data?.length||0);
+  const totalDep=selectedDeptos.length>0?selectedDeptos.length:Object.keys(byDepto).length;
+  const loading=loadingData||loadingGeo;
 
-  if (!isClient) return null;
+  if(!isClient) return null;
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 60px)',background:C.bg,fontFamily:'system-ui,-apple-system,sans-serif'}}>
 
-      {/* ── Barra modos ── */}
+      {/* Barra de modos */}
       <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`,flexWrap:'wrap'}}>
         <span style={{fontSize:11,color:C.textFaint,marginRight:4,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Ver por:</span>
         <ModeBtn label="PROVINCIAS"    active={filterMode==='provincias'}    onClick={()=>setFilterMode('provincias')}/>
         <ModeBtn label="ZONAS"         active={filterMode==='zonas'}         onClick={()=>setFilterMode('zonas')}/>
         <ModeBtn label="DEPARTAMENTOS" active={filterMode==='departamentos'} onClick={()=>setFilterMode('departamentos')}/>
 
-        {/* Leyenda inline modos */}
         <span style={{marginLeft:12,fontSize:11,color:C.textFaint}}>
           {filterMode==='provincias'&&'Bordes blancos = límites de provincia'}
           {filterMode==='zonas'&&'Bordes de color = zona de cada departamento'}
           {filterMode==='departamentos'&&'Bordes azul claro = límites de departamento'}
         </span>
 
-        {/* Selección activa */}
         {selectedDeptos.length>0&&(
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
             <div style={{background:C.selBg,border:`1px solid ${C.sel}`,borderRadius:99,padding:'4px 14px',display:'flex',alignItems:'center',gap:8}}>
               <span style={{width:7,height:7,background:C.sel,borderRadius:'50%',display:'inline-block'}}/>
               <span style={{fontSize:12,color:C.sel,fontWeight:600}}>
                 {filterMode==='zonas'&&zonaData
-                  ? [...new Set(selectedDeptos.map(d=>zonaData.deptoMap?.[d.key]?.zona).filter(Boolean))].join(' · ')
-                  : filterMode==='provincias'
-                    ? [...new Set(selectedDeptos.map(d=>d.prov||'').filter(Boolean))].slice(0,4).join(' · ')
-                    : `${selectedDeptos.length} deptos`
+                  ?[...new Set(selectedDeptos.map(d=>{const ni=Number(d.key);return ni?zonaData.idToZona?.[ni]:zonaData.deptoMap?.[d.key]?.zona;}).filter(Boolean))].join(' · ')
+                  :filterMode==='provincias'
+                    ?[...new Set(selectedDeptos.map(d=>d.prov||'').filter(Boolean))].slice(0,4).join(' · ')
+                    :`${selectedDeptos.length} deptos`
                 }
               </span>
             </div>
@@ -482,10 +563,8 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
         )}
       </div>
 
-      {/* ── Contenido ── */}
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
-        {/* Panel izquierdo zonas */}
         {filterMode==='zonas'&&zonaData&&(
           <ZonaPanel
             zonaData={zonaData} byDepto={byDepto}
@@ -494,7 +573,6 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
           />
         )}
 
-        {/* Mapa */}
         <div style={{flex:1,position:'relative'}}>
           {dataError&&(
             <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',gap:12,alignItems:'center',justifyContent:'center',zIndex:10}}>
@@ -504,14 +582,13 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
             </div>
           )}
 
-          {/* Hint */}
           {!loading&&!dataError&&selectedDeptos.length===0&&(
             <div style={{position:'absolute',bottom:12,left:'50%',transform:'translateX(-50%)',zIndex:999,background:'rgba(15,25,35,0.75)',backdropFilter:'blur(8px)',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 16px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}>
               Click para {filterMode==='provincias'?'seleccionar toda la provincia':filterMode==='zonas'?'seleccionar toda la zona':'seleccionar el departamento'}
             </div>
           )}
 
-          {/* Leyenda heatmap */}
+          {/* Leyenda */}
           <div style={{position:'absolute',bottom:12,left:12,zIndex:1000,background:'rgba(15,25,35,0.88)',backdropFilter:'blur(12px)',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',minWidth:156}}>
             <p style={{margin:'0 0 8px',fontSize:11,fontWeight:700,color:C.text,letterSpacing:'0.04em'}}>SOC. BASE CLAVE</p>
             {C.heat.slice().reverse().map((col,i)=>{
@@ -544,7 +621,7 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
             geojsonProvs={geojsonP}
             byDepto={byDepto}
             zonaData={zonaData}
-            deptoIds={deptoIds}
+            gadmToId={gadmToId}
             zonePalette={zonePalette}
             filterMode={filterMode}
             selectedKeys={selectedKeys}
@@ -552,7 +629,7 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
           />
         </div>
 
-        {/* Panel derecho — detalle */}
+        {/* Panel detalle */}
         <div style={{width:260,background:C.surface,borderLeft:`1px solid ${C.border}`,overflowY:'auto',display:'flex',flexDirection:'column'}}>
           <div style={{padding:'16px 16px 12px',borderBottom:`1px solid ${C.border}`}}>
             <p style={{margin:0,fontSize:14,fontWeight:700,color:C.text}}>Detalle</p>
@@ -576,9 +653,9 @@ export default function MapaTab({data188ext, data189, selectedDeptos=[], onDepto
 
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:14}}>
                 {[
-                  {l:'Soc.',v:activeInfo.d.soc,         c:C.brandL, bg:C.brandSub},
-                  {l:'Kt cab',v:fmt(activeInfo.d.kt),   c:C.warn,   bg:C.warnSub},
-                  {l:'Kv vac',v:fmt(activeInfo.d.kv),   c:C.positive,bg:C.posSub},
+                  {l:'Soc.',v:activeInfo.d.soc,c:C.brandL,bg:C.brandSub},
+                  {l:'Kt cab',v:fmt(activeInfo.d.kt),c:C.warn,bg:C.warnSub},
+                  {l:'Kv vac',v:fmt(activeInfo.d.kv),c:C.positive,bg:C.posSub},
                 ].map(({l,v,c,bg})=>(
                   <div key={l} style={{background:bg,borderRadius:8,padding:'7px 6px',textAlign:'center'}}>
                     <div style={{fontWeight:700,fontSize:15,color:c}}>{v}</div>

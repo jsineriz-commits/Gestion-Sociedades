@@ -24,21 +24,20 @@ export async function GET() {
     // Cols (0-based): A=0 YCNTRD, B=1 XCNTRD, C=2 Depto_Latitud, D=3 Depto_Longitud,
     //                 E=4 PROVINCIA, F=5 PROV, G=6 DEPARTAMTO, H=7 CABECERA,
     //                 I=8 PERIMETRO, J=9 SUP__HAS_, K=10 DEPTO_ID, L=11 LINK, M=12 AREA
-    const mergeData = (mergeRows || []).slice(1); // saltar header
+    const mergeData = (mergeRows || []).slice(1);
 
-    // idToInfo: DEPTO_ID → { prov, dept, lat, lng }
-    const idToInfo = {};
-    // nameToId: norm(prov+dept) → DEPTO_ID  (para matchear GADM)
-    const nameToId = {};
-    // normDept: norm(dept) → DEPTO_ID (fallback cuando prov no matchea)
-    const normDeptToId = {};
+    const idToInfo      = {};
+    const nameToId      = {};
+    const normDeptToId  = {};
+    const mergeCoords   = []; // [{id, lat, lng}] para matching por coordenadas
 
     mergeData.forEach(row => {
-      const lat   = parseFloat(String(row[2] || '').replace(',', '.')) || 0;
-      const lng   = parseFloat(String(row[3] || '').replace(',', '.')) || 0;
-      const prov  = String(row[4] || '').trim().toUpperCase();
-      const dept  = String(row[6] || '').trim().toUpperCase();
-      const id    = Number(row[10]);
+      // Coordenadas: preferir col C/D (Depto_Lat/Lng), fallback a col A/B (Y/XCNTRD)
+      const lat = parseFloat(String(row[2] || row[0] || '').replace(',', '.')) || 0;
+      const lng = parseFloat(String(row[3] || row[1] || '').replace(',', '.')) || 0;
+      const prov = String(row[4] || '').trim().toUpperCase();
+      const dept = String(row[6] || '').trim().toUpperCase();
+      const id   = Number(row[10]);
 
       if (!id || !dept) return;
 
@@ -46,8 +45,12 @@ export async function GET() {
 
       const key = norm(prov) + '|' + norm(dept);
       nameToId[key] = id;
-      // También por solo dept (fallback)
       if (!normDeptToId[norm(dept)]) normDeptToId[norm(dept)] = id;
+
+      // Array de coordenadas para nearest-neighbor matching
+      if (lat !== 0 && lng !== 0) {
+        mergeCoords.push({ id, lat, lng });
+      }
     });
 
     // ── Hoja "BC - ID" ───────────────────────────────────────────────
@@ -74,10 +77,11 @@ export async function GET() {
 
     const result = {
       idToInfo,        // DEPTO_ID → { prov, dept, lat, lng }
-      nameToId,        // norm(prov)+'|'+norm(dept) → DEPTO_ID  (para GADM)
+      nameToId,        // norm(prov)+'|'+norm(dept) → DEPTO_ID
       normDeptToId,    // norm(dept) → DEPTO_ID (fallback)
-      bcLookup,        // norm(prov)+'|'+norm(partido) → DEPTO_ID  (para Q188)
-      bcDeptOnly,      // norm(partido) → DEPTO_ID (fallback Q188)
+      bcLookup,        // norm(prov)+'|'+norm(partido) → DEPTO_ID
+      bcDeptOnly,      // norm(partido) → DEPTO_ID (fallback)
+      mergeCoords,     // [{id, lat, lng}] para matching por coordenadas con GADM
     };
 
     cache = result;
