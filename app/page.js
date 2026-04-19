@@ -137,6 +137,43 @@ export default function Home() {
       });
     }
 
+    // ── Filtro por departamentos seleccionados en el mapa ────────────────
+    // selectedDeptos = [{key, name, prov, d, zona}]
+    //   name: nombre del partido (ej "ADOLFO ALSINA") — uppercase desde Q202
+    //   prov: provincia completa (ej "BUENOS AIRES") — uppercase desde Q202
+    if (selectedDeptos.length > 0) {
+      // Mapa de nombre-completo → código abreviado que usa Q188
+      const EXPAND = {
+        'BUENOS AIRES':'BUE','CATAMARCA':'CAT','CHACO':'CHA','CHUBUT':'CHU',
+        'CORDOBA':'CBA','CORRIENTES':'COR','ENTRE RIOS':'ERI','FORMOSA':'FOR',
+        'JUJUY':'JUJ','LA PAMPA':'LPA','LA RIOJA':'LAR','MENDOZA':'MZA',
+        'MISIONES':'MIS','NEUQUEN':'NQN','RIO NEGRO':'RNE','SALTA':'SAL',
+        'SAN JUAN':'SJU','SAN LUIS':'SLU','SANTA CRUZ':'SCR','SANTA FE':'SFE',
+        'SANTIAGO DEL ESTERO':'SDE','TIERRA DEL FUEGO':'TDF','TUCUMAN':'TUC',
+        'CABA':'CABA',
+      };
+      // Set de "PROV_ABREV|PARTIDO" para Q188 (que usa provincias abreviadas)
+      const deptSetQ188 = new Set(
+        selectedDeptos.map(d => {
+          const abbr = EXPAND[d.prov.toUpperCase()] || d.prov.toUpperCase();
+          return abbr + '|' + d.name.toUpperCase();
+        })
+      );
+      // Set de solo nombre de partido para Q189 (provincia no siempre disponible)
+      const deptNamesQ189 = new Set(selectedDeptos.map(d => d.name.toUpperCase()));
+
+      base188 = base188.filter(r => {
+        const dep  = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').toUpperCase();
+        const prov = String(r.prov_establecimiento_senasa  || r.prov_fiscal_senasa   || '').toUpperCase();
+        return deptSetQ188.has(prov + '|' + dep);
+      });
+
+      base189 = base189.filter(r => {
+        const dep = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
+        return deptNamesQ189.has(dep);
+      });
+    }
+
     // Filtro Post-fetch en memoria (si agregaron un string en partido que Metabase no haya filtrado)
     if (filtroPartido && filtroPartido.trim() !== '') {
       const q = filtroPartido.toUpperCase().trim();
@@ -430,14 +467,20 @@ export default function Home() {
             </div>
           </div>
 
+
           {/* Banner filtro mapa activo */}
           {selectedDeptos.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.5rem', background: '#d0e8f5', border: '1px solid #bfd5e4', borderRadius: 8, padding: '8px 16px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: '#1d6fa4', fontWeight: 600 }}>📍 Filtro de mapa activo:</span>
-              {selectedDeptos.map(d => (
+              <span style={{ fontSize: 13, color: '#1d6fa4', fontWeight: 600 }}>📍 Filtro de mapa:</span>
+              {selectedDeptos.slice(0, 5).map(d => (
                 <span key={d.key} style={{ background: '#fff', border: '1px solid #bfd5e4', borderRadius: 99, padding: '2px 10px', fontSize: 12, color: '#1d6fa4', fontWeight: 600 }}>{d.name}</span>
               ))}
-              <button onClick={() => setSelectedDeptos([])} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #bfd5e4', borderRadius: 6, color: '#1d6fa4', padding: '3px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>× Limpiar filtro mapa</button>
+              {selectedDeptos.length > 5 && <span style={{ fontSize: 12, color: '#1d6fa4' }}>+{selectedDeptos.length - 5} más</span>}
+              {isEmpty
+                ? <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600, marginLeft: 8 }}>⚠️ Presioná "Buscar en Metabase" para cargar sociedades de esta zona</span>
+                : <button onClick={() => setActiveTab('FUNNEL')} style={{ background: '#1d6fa4', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Ver Funnel →</button>
+              }
+              <button onClick={() => setSelectedDeptos([])} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #bfd5e4', borderRadius: 6, color: '#1d6fa4', padding: '3px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>× Limpiar</button>
             </div>
           )}
 
