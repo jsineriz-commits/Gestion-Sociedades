@@ -28,6 +28,13 @@ function norm(name) {
     .replace(/\bGRAL\b/g,'GENERAL').replace(/\bCNEL\b/g,'CORONEL')
     .replace(/\bSTA\b/g,'SANTA').replace(/\bSTO\b/g,'SANTO')
     .replace(/\bTTE\b/g,'TENIENTE').replace(/\bPTE\b/g,'PRESIDENTE')
+    // Reparar artículos fusionados en CamelCase GADM:
+    // "VEINTICINCODE MAYO" → "VEINTICINCO DE MAYO"
+    // "GENERALDELASHOCES" → "GENERAL DEL LAS HACES" etc.
+    .replace(/(\w+?)DEL\b/g,'$1 DEL')
+    .replace(/(\w+?)DE\b/g,'$1 DE')
+    .replace(/(\w+?)LAS\b/g,'$1 LAS')
+    .replace(/(\w+?)LOS\b/g,'$1 LOS')
     .replace(/\s+/g,' ').trim();
 }
 
@@ -134,21 +141,27 @@ function buildGadmToId(geojson, mergeCoords) {
 }
 
 // ─── Resolver key de un feature ────────────────────────────────────────
-// 1. gadmToId (coordenadas) → más preciso, no depende de nombres
-// 2. nameToId (nombres del Merge sheet) → fallback
-// 3. norm(nombre) → último recurso
+// 1. Matching por nombre exacto (Merge sheet) — PRIMARIO, más preciso
+// 2. Matching por nombre solo (sin provincia) — SECUNDARIO
+// 3. Coordenadas (gadmToId) — ÚLTIMO RECURSO, solo si los coords son WGS84  
+// 4. norm(nombre) — fallback final
 function getFeatureKey(f, gadmToId, nameToId, normDeptToId) {
   const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
   const prov  =f.properties?.NAME_1||f.properties?.provincia_nombre||'';
 
-  const gid=f.properties?.GID_2||f.properties?.gid;
-  if (gid&&gadmToId?.[String(gid)]) return gadmToId[String(gid)];
-
+  // 1. PRIMARIO — nombre completo (prov+dept) contra Merge sheet
   if (nameToId) {
     const idKey=norm(prov)+'|'+norm(nombre);
-    const id=nameToId[idKey]||(normDeptToId&&normDeptToId[norm(nombre)]);
-    if (id) return String(id);
+    if (nameToId[idKey]) return String(nameToId[idKey]);
   }
+
+  // 2. SECUNDARIO — solo nombre de depto sin provincia
+  if (normDeptToId) {
+    const byName=normDeptToId[norm(nombre)];
+    if (byName) return String(byName);
+  }
+
+  // 3. Fallback: norm(nombre) — permite match con Q188 si usaron mismo nombre
   return norm(nombre);
 }
 
