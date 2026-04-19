@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSpreadsheet } from '../../../lib/sheets.js';
+import { writeSheetData } from '../../../lib/sheets.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -32,20 +32,25 @@ const COLS = [
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { filas = [], filtro = 'todas', zona = '', ts = '' } = body;
+    const { filas = [], filtro = 'todas', zona = '' } = body;
 
-    // Cabecera: metainfo de la exportación
+    // Nombre único de pestaña: incluye fecha + hora para no pisar exportaciones previas
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const ts  = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const filtroLabel = { todas:'Todas', bc:'Solo BC', dcac:'dCaC', libres:'Libres' }[filtro] || filtro;
+    const sheetName = `Exp ${filtroLabel} ${ts}`;
+
+    // Fila de metainfo
     const metaRow = [
-      `Exportado: ${new Date().toLocaleString('es-AR')}`,
-      `Filtro: ${filtro}`,
-      zona ? `Zona/Deptos: ${zona}` : '',
-      `Total filas: ${filas.length}`,
+      `Exportado: ${now.toLocaleString('es-AR')}`,
+      `Filtro: ${filtroLabel}`,
+      zona ? `Zona: ${zona}` : '',
+      `Total: ${filas.length} sociedades`,
     ];
 
-    // Fila de headers
-    const header = COLS.map(c => c.label);
-
-    // Filas de datos
+    // Header + datos
+    const header   = COLS.map(c => c.label);
     const dataRows = filas.map(r => COLS.map(c => {
       const v = r[c.key];
       return v === null || v === undefined ? '' : v;
@@ -53,13 +58,8 @@ export async function POST(req) {
 
     const rows2D = [metaRow, header, ...dataRows];
 
-    // Título del nuevo archivo: incluye fecha y filtro activo
-    const fecha = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-    const filtroLabel = { todas:'Todas', bc:'Solo BC', dcac:'En dCaC', libres:'Cuentas Libres' }[filtro] || filtro;
-    const title = `GDS | ${filtroLabel} | ${fecha}`;
-
-    const { url } = await createSpreadsheet(title, rows2D);
-    return NextResponse.json({ url, filas: filas.length });
+    const { url } = await writeSheetData(sheetName, rows2D);
+    return NextResponse.json({ url, filas: filas.length, sheetName });
   } catch (err) {
     console.error('[export-sociedades]', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
