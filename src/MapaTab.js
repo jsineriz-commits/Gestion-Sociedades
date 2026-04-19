@@ -98,7 +98,9 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
       const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
       key = id ? String(id) : norm(rawName);
     } else {
-      key = norm(rawName);
+      // Fallback: prov+dept (garantiza unicidad entre provincias)
+      // "SAN JUAN|VEINTICINCO DE MAYO" ≠ "BUENOS AIRES|VEINTICINCO DE MAYO"
+      key = norm(fullProv)+'|'+norm(rawName);
     }
 
     if (!m[key]) m[key]={soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
@@ -146,28 +148,22 @@ function buildGadmToId(geojson, mergeCoords) {
 }
 
 // ─── Resolver key de un feature ────────────────────────────────────────
-// 1. Matching por nombre exacto (Merge sheet) — PRIMARIO, más preciso
-// 2. Matching por nombre solo (sin provincia) — SECUNDARIO
-// 3. Coordenadas (gadmToId) — ÚLTIMO RECURSO, solo si los coords son WGS84  
-// 4. norm(nombre) — fallback final
-function getFeatureKey(f, gadmToId, nameToId, normDeptToId) {
+// 1. nameToId (prov+dept) → DEPTO_ID        — más preciso, el Merge sheet
+// 2. norm(prov)|norm(nombre)                 — siempre incluye provincia
+//    Nunca se cae a dept-solo para evitar colisiones entre provincias
+//    (ej. "Veinticinco de Mayo" en BS.AS. ≠ San Juan)
+function getFeatureKey(f, _gadmToId, nameToId) {
   const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
   const prov  =f.properties?.NAME_1||f.properties?.provincia_nombre||'';
 
-  // 1. PRIMARIO — nombre completo (prov+dept) contra Merge sheet
+  // 1. PRIMARIO — prov+dept contra nameToId del Merge sheet → DEPTO_ID
   if (nameToId) {
     const idKey=norm(prov)+'|'+norm(nombre);
     if (nameToId[idKey]) return String(nameToId[idKey]);
   }
 
-  // 2. SECUNDARIO — solo nombre de depto sin provincia
-  if (normDeptToId) {
-    const byName=normDeptToId[norm(nombre)];
-    if (byName) return String(byName);
-  }
-
-  // 3. Fallback: norm(nombre) — permite match con Q188 si usaron mismo nombre
-  return norm(nombre);
+  // 2. FALLBACK — prov+dept normalizado (único por provincia)
+  return norm(prov)+'|'+norm(nombre);
 }
 
 const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(Math.round(n));
