@@ -288,27 +288,35 @@ function LeafletMap({
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        // Color: amarillo si seleccionado, color sólido de zona, o mapa de calor azul
+        // Color: amarillo si sel, color sólido zona (siempre opaco), o calor azul
+        const inZona = filterMode === 'zonas' && zona && zonePalette?.[zona];
         const fillColor = sel
           ? '#facc15'
-          : (filterMode === 'zonas' && zona && zonePalette?.[zona])
+          : inZona
             ? zonePalette[zona]
-            : hColZone(soc, maxSoc, C.heat);
+            : filterMode === 'zonas'
+              ? '#2a3040' // sin zona → gris oscuro sutil (no negro puro)
+              : hColZone(soc, maxSoc, C.heat);
+        const opacity = sel ? 0.95 : inZona ? 0.85 : (soc > 0 ? 0.82 : 0.15);
         const r=soc>0?Math.max(4,Math.min(30,4+Math.sqrt(soc/maxSoc)*30)):3;
-        return L.circleMarker(ll,{radius:r,fillColor,color:sel?'#ca8a04':'rgba(0,0,0,0.2)',weight:sel?1.5:0.4,fillOpacity:soc>0?0.88:0.2});
+        return L.circleMarker(ll,{radius:r,fillColor,color:sel?'#ca8a04':'rgba(0,0,0,0.2)',weight:sel?1.5:0.4,fillOpacity:opacity});
       },
       style:(f)=>{
         const key=fKey(f);
         const d=byDepto[key];const soc=d?.soc||0;const sel=selectedKeys.has(key);
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
         const zona=getZona(key,nombre);
-        // Color: amarillo si seleccionado, color sólido de zona, o mapa de calor azul
+        // Color: amarillo si sel, color sólido zona (siempre opaco), o calor azul
+        const inZona2 = filterMode === 'zonas' && zona && zonePalette?.[zona];
         const fillColor2 = sel
           ? '#facc15'
-          : (filterMode === 'zonas' && zona && zonePalette?.[zona])
+          : inZona2
             ? zonePalette[zona]
-            : hColZone(soc, maxSoc, C.heat);
-        return{fillColor:fillColor2,weight:sel?1.5:0,color:sel?'#ca8a04':'transparent',fillOpacity:soc>0?0.88:0.25};
+            : filterMode === 'zonas'
+              ? '#2a3040' // sin zona → gris oscuro sutil
+              : hColZone(soc, maxSoc, C.heat);
+        const opacity2 = sel ? 0.95 : inZona2 ? 0.85 : (soc > 0 ? 0.82 : 0.15);
+        return{fillColor:fillColor2,weight:sel?2:0,color:sel?'#ca8a04':'transparent',fillOpacity:opacity2};
       },
       onEachFeature:(f,lyr)=>{
         const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
