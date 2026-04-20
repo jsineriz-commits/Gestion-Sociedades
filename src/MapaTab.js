@@ -202,16 +202,12 @@ function buildGadmToId(geojson, mergeCoords) {
 // 2. norm(prov)|norm(nombre)                 — siempre incluye provincia
 //    Nunca se cae a dept-solo para evitar colisiones entre provincias
 //    (ej. "Veinticinco de Mayo" en BS.AS. ≠ San Juan)
-function getFeatureKey(f, gadmToId, nameToId, gadmRawToNorm) {
+function getFeatureKey(f, _gadmToId, nameToId, gadmRawToNorm) {
   const nombre=String(f.properties?.NAME_2||f.properties?.nombre||'');
   const prov  =String(f.properties?.NAME_1||f.properties?.provincia_nombre||'');
-  const gid   =f.properties?.GID_2||f.properties?.gid||'';
-
-  // 0. PRIORIDAD MÁS ALTA: GID_2 → DEPTO_ID via centroide geográfico
-  //    Completamente independiente de nombres, resuelve todos los casos de CamelCase
-  if(gadmToId && gid && gadmToId[gid]) return gadmToId[gid];
 
   // Traducir nombre GADM crudo → nombre normalizado usando col D del GADM-Match sheet
+  // Ej: "NuevedeJulio" → col D value, "QuemúQuemú" → col D value
   const cleanNombre=(gadmRawToNorm&&gadmRawToNorm[nombre])||nombre;
 
   // 1. PRIMARIO — prov+cleanDept contra nameToId del Merge sheet → DEPTO_ID
@@ -222,7 +218,7 @@ function getFeatureKey(f, gadmToId, nameToId, gadmRawToNorm) {
     if(rawKey!==idKey&&nameToId[rawKey]) return String(nameToId[rawKey]);
   }
 
-  // 2. FALLBACK — prov+nombre limpio normalizado (usa el nombre limpio si está disponible)
+  // 2. FALLBACK — prov+nombre limpio normalizado
   return norm(prov)+'|'+norm(cleanNombre);
 }
 
@@ -274,10 +270,15 @@ function LeafletMap({
       if(zonaData?.deptoMap?.[deptPart]?.zona) return zonaData.deptoMap[deptPart].zona;
     }
     // Path 3: nombre GADM raw normalizado con norm() para manejar CamelCase
-    // ej. "CarlosTejedor" → norm() → "CARLOS TEJEDOR" → deptoMap lookup
     const normNombre=nombre?norm(nombre):'';
-    return (normNombre&&zonaData?.deptoMap?.[normNombre]?.zona)||'';
-  },[zonaData]);
+    if(normNombre&&zonaData?.deptoMap?.[normNombre]?.zona) return zonaData.deptoMap[normNombre].zona;
+    // Path 4: usar gadmToRoster (col H de GADM-Match Deptos) para buscar nombre en Roster-Regiones
+    if(nombre&&deptoIds?.gadmToRoster?.[nombre]){
+      const {rosterDept}=deptoIds.gadmToRoster[nombre];
+      if(rosterDept){const rd=rosterDept.toUpperCase();if(zonaData?.deptoMap?.[rd]?.zona) return zonaData.deptoMap[rd].zona;}
+    }
+    return '';
+  },[zonaData,deptoIds]);
 
   // ── Init map ───────────────────────────────────────────────────────
   useEffect(()=>{
@@ -561,9 +562,12 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
       // siempre coincidan con las claves que genera fKey() del mapa
       const nk=norm(d.prov)+'|'+norm(d.name);
       if(nk!='|') s.add(nk);
+      // También agregar clave numérica para que coincida con fKey cuando nameToId tiene match
+      if(nk!='|'&&deptoIds?.nameToId?.[nk]) s.add(String(deptoIds.nameToId[nk]));
+      if(nk!='|'&&deptoIds?.bcLookup?.[nk]) s.add(String(deptoIds.bcLookup[nk]));
     }
     return s;
-  },[selectedDeptos]);
+  },[selectedDeptos,deptoIds]);
   const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[], zonaData?.zonaColors||{}),[zonaData]);
 
   // Resolver zona para una key (ID numerico o nombre)

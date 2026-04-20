@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getSheetData } from '../../../lib/sheets.js';
 
 export const dynamic = 'force-dynamic';
@@ -86,19 +86,27 @@ export async function GET() {
     const gadmMatchData = (gadmMatchRows || []).slice(1); // skip header
     let manualMatches = 0;
     // gadmRawToNorm: nombre GADM crudo (col B) → nombre normalizado (col D)
-    // Ej: "NuevedeJulio" → "NUEVE DE JULIO", "QuemúQuemú" → "QUEMU QUEMU"
     const gadmRawToNorm = {};
+    // gadmToRoster: nombre GADM crudo (col B) → { rosterDept (col H), rosterProv (col I) }
+    //   Para que getZona() pueda buscar en deptoMap con el nombre de Roster-Regiones
+    const gadmToRoster = {};
 
     gadmMatchData.forEach(row => {
-      const gadmProv = String(row[0] || '').trim(); // col A: prov GADM (ej. "BuenosAires")
-      const gadmDept = String(row[1] || '').trim(); // col B: depto GADM (ej. "NuevedeJulio")
-      const normDept = String(row[3] || '').trim(); // col D: depto normalizado (ej. "NUEVE DE JULIO")
-      const bcDept   = String(row[5] || '').trim(); // col F → partido BC
-      const bcProv   = String(row[6] || '').trim(); // col G → provincia BC
+      const gadmProv   = String(row[0] || '').trim(); // col A: prov GADM (ej. "BuenosAires")
+      const gadmDept   = String(row[1] || '').trim(); // col B: depto GADM (ej. "NuevedeJulio")
+      const normDept   = String(row[3] || '').trim(); // col D: depto normalizado
+      const bcDept     = String(row[5] || '').trim(); // col F → nombre en query Metabase
+      const bcProv     = String(row[6] || '').trim(); // col G → provincia en query Metabase
+      const rosterDept = String(row[7] || '').trim(); // col H → nombre en Roster-Regiones (NUEVO)
+      const rosterProv = String(row[8] || '').trim(); // col I → provincia en Roster-Regiones (NUEVO)
 
-      // Construir gadmRawToNorm con col B → col D
+      // gadmRawToNorm: col B → col D (para traducción de nombres en getFeatureKey)
       if (gadmDept && normDept && gadmDept !== normDept) {
         gadmRawToNorm[gadmDept] = normDept;
+      }
+      // gadmToRoster: col B → col H/I (para getZona busque en deptoMap con nombre de Roster)
+      if (gadmDept && rosterDept) {
+        gadmToRoster[gadmDept] = { rosterDept, rosterProv: rosterProv || bcProv || gadmProv };
       }
 
       if (!bcDept || !gadmDept) return; // solo filas con datos en col F
@@ -108,12 +116,12 @@ export async function GET() {
       const id    = bcLookup[bcKey] || bcDeptOnly[norm(bcDept)];
       if (!id) return;
 
-      // Agregar al nameToId solo si no estaba ya
-      const gadmKey = norm(gadmProv) + '|' + norm(gadmDept);
+      // Agregar al nameToId usando normGadm (CamelCase-aware) para que coincida con MapaTab
+      // normGadm("BuenosAires") = "BUENOS AIRES", normGadm("NuevedeJulio") = "NUEVEDE JULIO"
+      const gadmKey = normGadm(gadmProv) + '|' + normGadm(gadmDept);
       if (!nameToId[gadmKey]) {
         nameToId[gadmKey] = id;
-        if (!normDeptToId[norm(gadmDept)]) normDeptToId[norm(gadmDept)] = id;
-        // Completar idToInfo si tampoco existía
+        if (!normDeptToId[normGadm(gadmDept)]) normDeptToId[normGadm(gadmDept)] = id;
         if (!idToInfo[id]) {
           idToInfo[id] = { prov: norm(bcProv || gadmProv), dept: norm(bcDept), lat: 0, lng: 0 };
         }
@@ -130,7 +138,8 @@ export async function GET() {
       bcLookup,        // norm(prov)+'|'+norm(partido) → DEPTO_ID
       bcDeptOnly,      // norm(partido) → DEPTO_ID (fallback)
       mergeCoords,     // [{id, lat, lng}] para matching por coordenadas con GADM
-      gadmRawToNorm,   // nombre GADM crudo → nombre normalizado (ej. "NuevedeJulio" → "NUEVE DE JULIO")
+      gadmRawToNorm,   // nombre GADM crudo → nombre normalizado (col D)
+      gadmToRoster,    // nombre GADM crudo → { rosterDept, rosterProv } (col H/I) para getZona()
     };
 
     cache = result;
@@ -145,9 +154,21 @@ export async function GET() {
   }
 }
 
-// ── Normalización local ─────────────────────────────────────────────
+// ── Normalización local (sin CamelCase split) — para nombres ya normalizados —
 function norm(str) {
   return String(str || '').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, ' ')
+    .replace(/\bGRAL\b/g, 'GENERAL').replace(/\bCNEL\b/g, 'CORONEL')
+    .replace(/\bSTA\b/g, 'SANTA').replace(/\bSTO\b/g, 'SANTO')
+    .replace(/\bTTE\b/g, 'TENIENTE').replace(/\bPTE\b/g, 'PRESIDENTE')
+    .replace(/\s+/g, ' ').trim();
+}
+// ── normGadm: igual que MapaTab's norm, incluye CamelCase split —
+// Usada para construir claves de GADM features ("BuenosAires" → "BUENOS AIRES")
+function normGadm(str) {
+  let s = String(str||'').replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2');
+  return s.toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\./g, ' ')
     .replace(/\bGRAL\b/g, 'GENERAL').replace(/\bCNEL\b/g, 'CORONEL')
