@@ -75,6 +75,45 @@ export async function GET() {
       if (!bcDeptOnly[norm(partido)]) bcDeptOnly[norm(partido)] = id;
     });
 
+    // ── Hoja "GADM - Match Deptos" — matches manuales (cols F + G) ───
+    // Col A=0 Provincia GADM, B=1 Depto GADM (NAME_2), E=4 GID_2
+    // Col F=5 → partido BC (partido_establecimiento_senasa)
+    // Col G=6 → provincia BC (para desambiguar el lookup)
+    let gadmMatchRows = [];
+    try { gadmMatchRows = await getSheetData('GADM - Match Deptos'); }
+    catch(e) { console.warn('[depto-ids] No se pudo leer GADM - Match Deptos:', e.message); }
+
+    const gadmMatchData = (gadmMatchRows || []).slice(1); // skip header
+    let manualMatches = 0;
+
+    gadmMatchData.forEach(row => {
+      const gadmProv = String(row[0] || '').trim();
+      const gadmDept = String(row[1] || '').trim();
+      const bcDept   = String(row[5] || '').trim(); // col F (BC name)
+      const bcProv   = String(row[6] || '').trim(); // col G (BC province)
+
+      if (!bcDept || !gadmDept) return; // solo filas con datos en col F
+
+      // Buscar DEPTO_ID: primero prov+partido, luego solo partido
+      const bcKey = norm(bcProv || gadmProv) + '|' + norm(bcDept);
+      const id    = bcLookup[bcKey] || bcDeptOnly[norm(bcDept)];
+      if (!id) return;
+
+      // Agregar al nameToId solo si no estaba ya
+      const gadmKey = norm(gadmProv) + '|' + norm(gadmDept);
+      if (!nameToId[gadmKey]) {
+        nameToId[gadmKey] = id;
+        if (!normDeptToId[norm(gadmDept)]) normDeptToId[norm(gadmDept)] = id;
+        // Completar idToInfo si tampoco existía
+        if (!idToInfo[id]) {
+          idToInfo[id] = { prov: norm(bcProv || gadmProv), dept: norm(bcDept), lat: 0, lng: 0 };
+        }
+        manualMatches++;
+      }
+    });
+
+    console.log(`[depto-ids] +${manualMatches} matches manuales desde GADM-Match Deptos`);
+
     const result = {
       idToInfo,        // DEPTO_ID → { prov, dept, lat, lng }
       nameToId,        // norm(prov)+'|'+norm(dept) → DEPTO_ID
