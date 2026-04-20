@@ -202,18 +202,25 @@ function buildGadmToId(geojson, mergeCoords) {
 // 2. norm(prov)|norm(nombre)                 — siempre incluye provincia
 //    Nunca se cae a dept-solo para evitar colisiones entre provincias
 //    (ej. "Veinticinco de Mayo" en BS.AS. ≠ San Juan)
-function getFeatureKey(f, _gadmToId, nameToId) {
-  const nombre=f.properties?.NAME_2||f.properties?.nombre||'';
-  const prov  =f.properties?.NAME_1||f.properties?.provincia_nombre||'';
+function getFeatureKey(f, _gadmToId, nameToId, gadmRawToNorm) {
+  const nombre=String(f.properties?.NAME_2||f.properties?.nombre||'');
+  const prov  =String(f.properties?.NAME_1||f.properties?.provincia_nombre||'');
 
-  // 1. PRIMARIO — prov+dept contra nameToId del Merge sheet → DEPTO_ID
+  // Traducir nombre GADM crudo al nombre normalizado si existe en el lookup
+  // Ej: "NuevedeJulio" → "NUEVE DE JULIO", "QuemúQuemú" → "QUEMU QUEMU"
+  const cleanNombre = (gadmRawToNorm && gadmRawToNorm[nombre]) || nombre;
+
+  // 1. PRIMARIO — prov+cleanDept contra nameToId del Merge sheet → DEPTO_ID
   if (nameToId) {
-    const idKey=norm(prov)+'|'+norm(nombre);
+    const idKey=norm(prov)+'|'+norm(cleanNombre);
     if (nameToId[idKey]) return String(nameToId[idKey]);
+    // también intentar con nombre crudo por compatibilidad
+    const rawKey=norm(prov)+'|'+norm(nombre);
+    if (rawKey!==idKey && nameToId[rawKey]) return String(nameToId[rawKey]);
   }
 
-  // 2. FALLBACK — prov+dept normalizado (único por provincia)
-  return norm(prov)+'|'+norm(nombre);
+  // 2. FALLBACK — prov+cleanDept normalizado (usa el nombre limpio de ser posible)
+  return norm(prov)+'|'+norm(cleanNombre);
 }
 
 const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(Math.round(n));
@@ -235,11 +242,11 @@ function LeafletMap({
   geojsonDeptos,geojsonProvs,
   byDepto,zonaData,gadmToId,zonePalette,
   filterMode,selectedKeys,onFeatureClick,
-  nameToId, normDeptToId,
+  nameToId, normDeptToId, gadmRawToNorm,
 }) {
   // fKey: resuelve key para un feature GADM
-  // Prioridad: 1) nameToId (prov+dept) 2) normDeptToId (dept solo) 3) norm(nombre)
-  const fKey = useCallback((f)=>getFeatureKey(f,gadmToId,nameToId,normDeptToId),[gadmToId,nameToId,normDeptToId]);
+  // Prioridad: 1) gadmRawToNorm (col D limpio) 2) nameToId (prov+dept) 3) norm(nombre)
+  const fKey = useCallback((f)=>getFeatureKey(f,gadmToId,nameToId,gadmRawToNorm),[gadmToId,nameToId,gadmRawToNorm]);
 
   const cRef   = useRef(null);
   const mapR   = useRef(null);
@@ -740,6 +747,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
             onFeatureClick={handleFeatureClick}
             nameToId={deptoIds?.nameToId}
             normDeptToId={deptoIds?.bcDeptOnly}
+            gadmRawToNorm={deptoIds?.gadmRawToNorm}
           />
         </div>
 

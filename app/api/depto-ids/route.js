@@ -85,12 +85,21 @@ export async function GET() {
 
     const gadmMatchData = (gadmMatchRows || []).slice(1); // skip header
     let manualMatches = 0;
+    // gadmRawToNorm: nombre GADM crudo (col B) → nombre normalizado (col D)
+    // Ej: "NuevedeJulio" → "NUEVE DE JULIO", "QuemúQuemú" → "QUEMU QUEMU"
+    const gadmRawToNorm = {};
 
     gadmMatchData.forEach(row => {
-      const gadmProv = String(row[0] || '').trim();
-      const gadmDept = String(row[1] || '').trim();
-      const bcDept   = String(row[5] || '').trim(); // col F (BC name)
-      const bcProv   = String(row[6] || '').trim(); // col G (BC province)
+      const gadmProv = String(row[0] || '').trim(); // col A: prov GADM (ej. "BuenosAires")
+      const gadmDept = String(row[1] || '').trim(); // col B: depto GADM (ej. "NuevedeJulio")
+      const normDept = String(row[3] || '').trim(); // col D: depto normalizado (ej. "NUEVE DE JULIO")
+      const bcDept   = String(row[5] || '').trim(); // col F → partido BC
+      const bcProv   = String(row[6] || '').trim(); // col G → provincia BC
+
+      // Construir gadmRawToNorm con col B → col D
+      if (gadmDept && normDept && gadmDept !== normDept) {
+        gadmRawToNorm[gadmDept] = normDept;
+      }
 
       if (!bcDept || !gadmDept) return; // solo filas con datos en col F
 
@@ -121,6 +130,7 @@ export async function GET() {
       bcLookup,        // norm(prov)+'|'+norm(partido) → DEPTO_ID
       bcDeptOnly,      // norm(partido) → DEPTO_ID (fallback)
       mergeCoords,     // [{id, lat, lng}] para matching por coordenadas con GADM
+      gadmRawToNorm,   // nombre GADM crudo → nombre normalizado (ej. "NuevedeJulio" → "NUEVE DE JULIO")
     };
 
     cache = result;
