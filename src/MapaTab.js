@@ -146,10 +146,12 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
     let key;
     const strKey = norm(fullProv)+'|'+norm(rawName); // clave string siempre disponible
     if (bcLookup) {
-      const id = bcLookup[strKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
+      // Solo usar bcLookup prov+dept (province-aware). NO usar bcDeptOnly: ese fallback
+      // ignora la provincia y causa que deptos homónimos ("Veinticinco de Mayo" en BA y RN)
+      // compartan la misma clave y el mismo dato/selección.
+      const id = bcLookup[strKey];
       key = id ? String(id) : strKey;
     } else {
-      // Fallback: prov+dept (garantiza unicidad entre provincias)
       key = strKey;
     }
 
@@ -158,7 +160,6 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
     m[key].kt  += kt;
     m[key].kv  += kv;
     // Alias: si clave primaria es numérica, también publicar clave string (para fKey string fallback)
-    // Ej: byDepto["350"] y byDepto["BUENOS AIRES|NUEVE DE JULIO"] apuntan al mismo objeto
     if (key !== strKey) m[strKey] = m[key];
   });
   return m;
@@ -590,7 +591,9 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
     if(filterMode==='departamentos'){
       newSelected=selectedKeys.has(key)
         ?newSelected.filter(x=>x.key!==key)
-        :[...newSelected,{key,name:nombre,prov,d,zona:resolvedZona}];
+        // norm(prov): "BuenosAires"→"BUENOS AIRES" para que d.prov sea siempre nombre completo
+        // en lugar del GADM CamelCase crudo; esto garantiza que EXPAND en page.js funcione
+        :[...newSelected,{key,name:nombre,prov:norm(prov),d,zona:resolvedZona}];
     } else if(filterMode==='provincias'){
       // Resolución de provincia por ID si disponible
       const numId=Number(key);

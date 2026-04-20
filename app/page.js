@@ -234,6 +234,12 @@ export default function Home() {
       const deptSetQ188 = new Set(
         selectedDeptos.map(d => (EXPAND[d.prov.toUpperCase()] || d.prov.toUpperCase()) + '|' + d.name.toUpperCase())
       );
+      // Province-aware set para Q189 (usa nombre completo—Q189 probablemente tiene prov completa)
+      // d.prov ya viene normalizado como "BUENOS AIRES" desde el fix de MapaTab handleFeatureClick
+      const deptProvSetQ189 = new Set(
+        selectedDeptos.map(d => d.prov.toUpperCase() + '|' + d.name.toUpperCase())
+      );
+      // Set de solo-dept (fallback cuando Q189 no tiene campo provincia)
       const deptNamesQ189 = new Set(selectedDeptos.map(d => d.name.toUpperCase()));
 
       // 1. Filtrar Q188 por prov+dept
@@ -246,12 +252,15 @@ export default function Home() {
       // 2. Extraer CUITs de los Q188 filtrados (400 en el ejemplo)
       const cuitsDeZona = new Set(base188.map(r => String(r.cuit || '').trim()).filter(Boolean));
 
-      // 3. Filtrar Q189: CUIT está en la base de la zona O establecimiento en la zona
+      // 3. Filtrar Q189: CUIT está en la base de la zona O establecimiento en la zona (prov+dept)
       base189 = base189.filter(r => {
         const cuit = String(r['st.cuit'] || r.cuit || '').trim();
         if (cuit && cuitsDeZona.has(cuit)) return true; // Sociedad BC está en la zona
         const dep  = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').toUpperCase();
-        return deptNamesQ189.has(dep); // Establecimiento principal en la zona
+        const prov = String(r.prov_est_bc || r.prov_dcac || r.prov_fiscal_bc || r.prov_est_dcac || '').toUpperCase();
+        // Primero prov+dept (preciso); luego solo dept si no hay campo provincia en Q189
+        if (prov) return deptProvSetQ189.has(prov + '|' + dep);
+        return deptNamesQ189.has(dep);
       });
 
       // 4. Filtrar usuarios por departamento
