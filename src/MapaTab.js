@@ -241,7 +241,7 @@ function LeafletMap({
   geojsonDeptos,geojsonProvs,
   byDepto,zonaData,gadmToId,zonePalette,
   filterMode,selectedKeys,onFeatureClick,
-  nameToId, normDeptToId, gadmRawToNorm,
+  nameToId, normDeptToId, gadmRawToNorm, gadmToRoster,
 }) {
   // fKey: resuelve key para un feature GADM
   // Prioridad: 1) gadmRawToNorm (col D limpio) 2) nameToId (prov+dept) 3) norm(nombre)
@@ -273,12 +273,12 @@ function LeafletMap({
     const normNombre=nombre?norm(nombre):'';
     if(normNombre&&zonaData?.deptoMap?.[normNombre]?.zona) return zonaData.deptoMap[normNombre].zona;
     // Path 4: usar gadmToRoster (col H de GADM-Match Deptos) para buscar nombre en Roster-Regiones
-    if(nombre&&deptoIds?.gadmToRoster?.[nombre]){
-      const {rosterDept}=deptoIds.gadmToRoster[nombre];
+    if(nombre&&gadmToRoster?.[nombre]){
+      const {rosterDept}=gadmToRoster[nombre];
       if(rosterDept){const rd=rosterDept.toUpperCase();if(zonaData?.deptoMap?.[rd]?.zona) return zonaData.deptoMap[rd].zona;}
     }
     return '';
-  },[zonaData,deptoIds]);
+  },[zonaData,gadmToRoster]);
 
   // ── Init map ───────────────────────────────────────────────────────
   useEffect(()=>{
@@ -767,6 +767,7 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
             nameToId={deptoIds?.nameToId}
             normDeptToId={deptoIds?.bcDeptOnly}
             gadmRawToNorm={deptoIds?.gadmRawToNorm}
+            gadmToRoster={deptoIds?.gadmToRoster}
           />
         </div>
 
