@@ -22,7 +22,8 @@ const ZONA_PAL = [
 
 // ─── Normalización ─────────────────────────────────────────────────────
 function norm(name) {
-  let s = String(name||'').replace(/([a-z])([A-Z])/g,'$1 $2');
+  // Separar CamelCase con letras Unicode (ej: "QuemúQuemú" → "Quemú Quemú", "LaPampa" → "La Pampa")
+  let s = String(name||'').replace(/(\p{Ll})(\p{Lu})/gu,'$1 $2');
   return s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/\./g,' ')
     .replace(/\bGRAL\b/g,'GENERAL').replace(/\bCNEL\b/g,'CORONEL')
