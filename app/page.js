@@ -309,6 +309,32 @@ export default function Home() {
       return { ...r, esAmarilla };
     });
 
+    // ── Cuentas Habilitadas = SoloBC + Libres + Mermas ───────────────────
+    // Computed pre-soloAmarillas sobre base188 completo (consistente con tarjeta totalSenasa)
+    const cuitToQ189All = {};
+    base189Marcada.forEach(r => {
+      const c = String(r['st.cuit'] || r.cuit || '').trim();
+      if (c) cuitToQ189All[c] = r;
+    });
+    let cuentasHabilitadas = 0;
+    base188.forEach(r => {
+      const dc = cuitToQ189All[String(r.cuit || '').trim()];
+      if (r.existe_en_dcac !== 'SI') {
+        cuentasHabilitadas++; // Caso 1: No está en DCAC (Solo BC)
+      } else if (dc) {
+        const tieneAsignado = dc.asociado_comercial || dc.representante;
+        if (!tieneAsignado) {
+          cuentasHabilitadas++; // Caso 2: Libre (en DCAC sin AC/Rep)
+        } else {
+          const ultimo = dc.Ult_act || dc.Ult_op;
+          if (!ultimo || new Date(ultimo) < fifteenMonthsAgo) {
+            cuentasHabilitadas++; // Caso 3: Merma (tiene AC/Rep pero inactiva 15+ meses)
+          }
+        }
+      }
+      // Si existe_en_dcac='SI' pero dc=null: Q189 no cargado, no asumimos nada
+    });
+
     // Toggle Filtro Amarillas (afecta TODA LA APP)
     let b188Final = base188;
     let b189Final = base189Marcada;
@@ -386,9 +412,10 @@ export default function Home() {
     return {
       funnelStats: {
         totalSenasa: base188.length,
-        estanEnDCAC: base189.length,
+        // Contar desde Q188 (siempre disponible), no desde Q189 que puede estar vacío
+        estanEnDCAC: base188.filter(r => r.existe_en_dcac === 'SI').length,
         actividadUltimos15M: conActividadReciente,
-        amarillasCount: amarillasCount
+        cuentasHabilitadas: cuentasHabilitadas, // SoloBC + Libres + Mermas
       },
       tables: {
         funnel: funnelView,
@@ -709,9 +736,9 @@ export default function Home() {
                     <div className="kpi-title">ACT. ÚLTIMOS 15 MESES</div>
                     <div className="kpi-value" style={{color: 'var(--success)'}}>{funnelStats.actividadUltimos15M}</div>
                   </div>
-                  <div className="kpi-card" style={{borderColor: soloAmarillas ? 'var(--warning)' : 'var(--border-color)', background: soloAmarillas ? '#fffbeb' : '#fff'}}>
-                    <div className="kpi-title">TOTAL AMARILLAS</div>
-                    <div className="kpi-value amarillo">{funnelStats.amarillasCount}</div>
+                  <div className="kpi-card" style={{borderColor:'var(--border-color)',background:'#fff'}}>
+                    <div className="kpi-title">CUENTAS HABILITADAS</div>
+                    <div className="kpi-value" style={{color:'#d97706'}}>{funnelStats.cuentasHabilitadas}</div>
                   </div>
                 </div>
 
