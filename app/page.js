@@ -473,11 +473,12 @@ export default function Home() {
                       <input type="checkbox" checked={activeProvs.some(ap=>ap.code===p.code)} onChange={e=>{
                         if(e.target.checked){
                           setActiveProvs([...activeProvs,p]);
-                          // También resaltar deptos de la provincia en el mapa
+                          // Usar idToInfo (clave=DEPTO_ID único) para evitar colisiones de nombre entre provincias
+                          // ej: "CAPITAL" existe en La Pampa, Catamarca, Jujuy, etc → deptoMap solo guarda el último
                           const normProv=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-                          const provDepts=(Object.entries(zonaDataSidebar?.deptoMap||{})
-                            .filter(([n,info])=>!/^\d+$/.test(n)&&normProv(info.provincia)===p.raw)
-                            .map(([name,info])=>({key:info.provincia+'|'+name,name,prov:info.provincia||p.raw,d:{soc:0,kt:0,kv:0},zona:info.zona||''})));
+                          const provDepts=(Object.entries(zonaDataSidebar?.idToInfo||{})
+                            .filter(([id,info])=>normProv(info.provincia)===p.raw)
+                            .map(([id,info])=>({key:info.provincia+'|'+info.departamento,name:info.departamento,prov:info.provincia||p.raw,d:{soc:0,kt:0,kv:0},zona:info.zona||''})));
                           setSelectedDeptos(prev=>{const ex=new Set(prev.map(d=>d.name.toUpperCase()));return[...prev,...provDepts.filter(d=>!ex.has(d.name.toUpperCase()))];});
                         } else {
                           setActiveProvs(activeProvs.filter(ap=>ap.code!==p.code));
