@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSheetData } from '../../../lib/sheets.js';
 
 export const dynamic = 'force-dynamic';
@@ -117,7 +117,7 @@ export async function GET() {
       if (!id) return;
 
       // Agregar al nameToId usando normGadm (CamelCase-aware) para que coincida con MapaTab
-      // normGadm("BuenosAires") = "BUENOS AIRES", normGadm("NuevedeJulio") = "NUEVEDE JULIO"
+      // normGadm("BuenosAires") = "BUENOS AIRES", normGadm("NuevedeJulio") = "NUEVE DE JULIO"
       const gadmKey = normGadm(gadmProv) + '|' + normGadm(gadmDept);
       if (!nameToId[gadmKey]) {
         nameToId[gadmKey] = id;
@@ -162,10 +162,14 @@ function norm(str) {
     .replace(/\bGRAL\b/g, 'GENERAL').replace(/\bCNEL\b/g, 'CORONEL')
     .replace(/\bSTA\b/g, 'SANTA').replace(/\bSTO\b/g, 'SANTO')
     .replace(/\bTTE\b/g, 'TENIENTE').replace(/\bPTE\b/g, 'PRESIDENTE')
+    .replace(/(\w+?)DEL\b/g,'$1 DEL')
+    .replace(/(\w+?)DE\b/g,'$1 DE')
+    .replace(/(\w+?)LAS\b/g,'$1 LAS')
+    .replace(/(\w+?)LOS\b/g,'$1 LOS')
     .replace(/\s+/g, ' ').trim();
 }
-// ── normGadm: igual que MapaTab's norm, incluye CamelCase split —
-// Usada para construir claves de GADM features ("BuenosAires" → "BUENOS AIRES")
+// ── normGadm: igual que MapaTab’s norm() — CamelCase split + preposiciones + abrev. ──
+// DEBE ser idéntica a la función norm() de MapaTab.js para que gadmKey == idKey en getFeatureKey
 function normGadm(str) {
   let s = String(str||'').replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2');
   return s.toUpperCase()
@@ -174,5 +178,10 @@ function normGadm(str) {
     .replace(/\bGRAL\b/g, 'GENERAL').replace(/\bCNEL\b/g, 'CORONEL')
     .replace(/\bSTA\b/g, 'SANTA').replace(/\bSTO\b/g, 'SANTO')
     .replace(/\bTTE\b/g, 'TENIENTE').replace(/\bPTE\b/g, 'PRESIDENTE')
+    // Mismo fix de preposiciones que MapaTab.js norm(): "NUEVEDE" → "NUEVE DE"
+    .replace(/(\w+?)DEL\b/g,'$1 DEL')
+    .replace(/(\w+?)DE\b/g,'$1 DE')
+    .replace(/(\w+?)LAS\b/g,'$1 LAS')
+    .replace(/(\w+?)LOS\b/g,'$1 LOS')
     .replace(/\s+/g, ' ').trim();
 }

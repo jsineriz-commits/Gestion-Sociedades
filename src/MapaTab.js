@@ -144,19 +144,22 @@ function buildByDepto(data, bcLookup, bcDeptOnly) {
     const fullProv = r.provincia ? rawProv : expandProv(rawProv);
 
     let key;
+    const strKey = norm(fullProv)+'|'+norm(rawName); // clave string siempre disponible
     if (bcLookup) {
-      const normKey = norm(fullProv)+'|'+norm(rawName);
-      const id = bcLookup[normKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
-      key = id ? String(id) : norm(fullProv)+'|'+norm(rawName);
+      const id = bcLookup[strKey] || (bcDeptOnly && bcDeptOnly[norm(rawName)]);
+      key = id ? String(id) : strKey;
     } else {
       // Fallback: prov+dept (garantiza unicidad entre provincias)
-      key = norm(fullProv)+'|'+norm(rawName);
+      key = strKey;
     }
 
     if (!m[key]) m[key]={soc:0,kt:0,kv:0,name:rawName,prov:rawProv};
     m[key].soc += soc;
     m[key].kt  += kt;
     m[key].kv  += kv;
+    // Alias: si clave primaria es numérica, también publicar clave string (para fKey string fallback)
+    // Ej: byDepto["350"] y byDepto["BUENOS AIRES|NUEVE DE JULIO"] apuntan al mismo objeto
+    if (key !== strKey) m[strKey] = m[key];
   });
   return m;
 }
