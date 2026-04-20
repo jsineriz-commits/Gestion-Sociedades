@@ -261,10 +261,19 @@ function LeafletMap({
   // Resolver zona por key (proba numeric ID → deptoMap por nombre)
   const getZona = useCallback((key,nombre)=>{
     const numId=Number(key);
-    return (numId&&zonaData?.idToZona?.[numId])
-      ||zonaData?.deptoMap?.[key]?.zona
-      ||zonaData?.deptoMap?.[nombre?.toUpperCase()]?.zona
-      ||'';
+    // Path 1: clave numérica → idToZona (del Roster-Regiones col C)
+    if(numId && zonaData?.idToZona?.[numId]) return zonaData.idToZona[numId];
+    // Path 2: clave exacta en deptoMap (ej. "CARLOS TEJEDOR")
+    if(zonaData?.deptoMap?.[key]?.zona) return zonaData.deptoMap[key].zona;
+    // Path 2b: extraer parte dept de clave "PROV|DEPT" (ej. "BUENOS AIRES|CARLOS TEJEDOR" → "CARLOS TEJEDOR")
+    if(key?.includes('|')){
+      const deptPart=key.split('|').slice(1).join('|');
+      if(zonaData?.deptoMap?.[deptPart]?.zona) return zonaData.deptoMap[deptPart].zona;
+    }
+    // Path 3: nombre GADM raw normalizado con norm() para manejar CamelCase
+    // ej. "CarlosTejedor" → norm() → "CARLOS TEJEDOR" → deptoMap lookup
+    const normNombre=nombre?norm(nombre):'';
+    return (normNombre&&zonaData?.deptoMap?.[normNombre]?.zona)||'';
   },[zonaData]);
 
   // ── Init map ───────────────────────────────────────────────────────
@@ -558,7 +567,10 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
   const getZonaForKey = useCallback((key,zona='')=>{
     if(zona) return zona;
     const numId=Number(key);
-    return (numId&&zonaData?.idToZona?.[numId])||zonaData?.deptoMap?.[key]?.zona||'';
+    if(numId&&zonaData?.idToZona?.[numId]) return zonaData.idToZona[numId];
+    if(zonaData?.deptoMap?.[key]?.zona) return zonaData.deptoMap[key].zona;
+    if(key?.includes('|')){const deptPart=key.split('|').slice(1).join('|');if(zonaData?.deptoMap?.[deptPart]?.zona) return zonaData.deptoMap[deptPart].zona;}
+    return '';
   },[zonaData]);
 
   const handleFeatureClick = useCallback(({key,nombre,prov,d,zona})=>{
