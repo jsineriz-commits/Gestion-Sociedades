@@ -474,9 +474,10 @@ export default function Home() {
                         if(e.target.checked){
                           setActiveProvs([...activeProvs,p]);
                           // También resaltar deptos de la provincia en el mapa
+                          const normProv=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
                           const provDepts=(Object.entries(zonaDataSidebar?.deptoMap||{})
-                            .filter(([n,info])=>!/^\d+$/.test(n)&&info.provincia===p.raw)
-                            .map(([name,info])=>({key:info.id?String(info.id):p.raw+'|'+name,name,prov:p.raw,d:{soc:0,kt:0,kv:0},zona:info.zona||''})));
+                            .filter(([n,info])=>!/^\d+$/.test(n)&&normProv(info.provincia)===p.raw)
+                            .map(([name,info])=>({key:info.provincia+'|'+name,name,prov:info.provincia||p.raw,d:{soc:0,kt:0,kv:0},zona:info.zona||''})));
                           setSelectedDeptos(prev=>{const ex=new Set(prev.map(d=>d.name.toUpperCase()));return[...prev,...provDepts.filter(d=>!ex.has(d.name.toUpperCase()))];});
                         } else {
                           setActiveProvs(activeProvs.filter(ap=>ap.code!==p.code));
@@ -508,7 +509,7 @@ export default function Home() {
                               // También resaltar deptos de la zona en el mapa
                               const zoneDepts=(zonaDataSidebar?.zonaDeptos?.[z]||[])
                                 .filter(n=>!/^\d+$/.test(n))
-                                .map(name=>{const info=zonaDataSidebar?.deptoMap?.[name]||{};return{key:info.id?String(info.id):(info.provincia||'')+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:z};});
+                                .map(name=>{const info=zonaDataSidebar?.deptoMap?.[name]||{};return{key:(info.provincia||'')+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:z};});
                               setSelectedDeptos(prev=>{const ex=new Set(prev.map(d=>d.name.toUpperCase()));return[...prev,...zoneDepts.filter(d=>!ex.has(d.name.toUpperCase()))];});
                             } else {
                               setSelectedZonas(selectedZonas.filter(s=>s!==z));
@@ -538,7 +539,7 @@ export default function Home() {
                     return (
                       <label key={name} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:isChk?'#f0fdf4':'transparent',fontSize:12.5}}>
                         <input type="checkbox" checked={isChk} onChange={e=>{
-                          if(e.target.checked) setSelectedDeptos([...selectedDeptos,{key:info.id?String(info.id):info.provincia+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:info.zona||''}]);
+                          if(e.target.checked) setSelectedDeptos([...selectedDeptos,{key:info.provincia+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:info.zona||''}]);
                           else setSelectedDeptos(selectedDeptos.filter(s=>s.name.toUpperCase()!==name));
                         }} style={{accentColor:'#059669',margin:0,flexShrink:0}}/>
                         <span style={{flex:1,lineHeight:'1.3'}}>{disp}</span>

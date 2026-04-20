@@ -533,7 +533,17 @@ export default function MapaTab({data188ext,data189,selectedDeptos=[],onDeptoFil
 
   const data    = (data188ext&&data188ext.length>0)?data188ext:mapaData;
   const byDepto = useMemo(()=>buildByDepto(data,deptoIds?.bcLookup,deptoIds?.bcDeptOnly),[data,deptoIds]);
-  const selectedKeys = useMemo(()=>new Set((selectedDeptos||[]).map(d=>d.key)),[selectedDeptos]);
+  const selectedKeys = useMemo(()=>{
+    const s=new Set();
+    for(const d of (selectedDeptos||[])){
+      if(d.key) s.add(d.key);
+      // También agregar norm(prov)|norm(name) para que selecciones del sidebar
+      // siempre coincidan con las claves que genera fKey() del mapa
+      const nk=norm(d.prov)+'|'+norm(d.name);
+      if(nk!='|') s.add(nk);
+    }
+    return s;
+  },[selectedDeptos]);
   const zonePalette  = useMemo(()=>buildZonePalette(zonaData?.zonasOrdenadas||[], zonaData?.zonaColors||{}),[zonaData]);
 
   // Resolver zona para una key (ID numerico o nombre)
