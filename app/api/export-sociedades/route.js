@@ -42,7 +42,7 @@ export async function POST(req) {
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const ts  = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const filtroLabel = { todas:'Todas', bc:'Solo BC', dcac:'dCaC', libres:'Libres' }[filtro] || filtro;
+    const filtroLabel = { todas:'Todas', bc:'Solo BC', dcac:'En dCaC', libres:'Cuentas Libres', mermas:'Mermas' }[filtro] || filtro;
     const sheetName = `Exp ${filtroLabel} ${ts}`;
 
     // Fila de metainfo

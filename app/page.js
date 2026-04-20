@@ -379,6 +379,18 @@ export default function Home() {
       r.existe_en_dcac === 'SI' && r._dcRow &&
       !r._dcRow.asociado_comercial && !r._dcRow.representante
     );
+    if (sociedadFilter === 'mermas') return all.filter(r => {
+      if (r.existe_en_dcac !== 'SI' || !r._dcRow) return false;
+      // Debe tener AC o Representante asignado
+      const tieneAsignado = r._dcRow.asociado_comercial || r._dcRow.representante;
+      if (!tieneAsignado) return false;
+      // Sin actividad hace 15+ meses (o nunca tuvo)
+      const ultimo = r._dcRow.Ult_act || r._dcRow.Ult_op;
+      if (!ultimo) return true; // nunca tuvo actividad = merma
+      const hace15m = new Date();
+      hace15m.setMonth(hace15m.getMonth() - 15);
+      return new Date(ultimo) < hace15m;
+    });
     return all; // 'todas'
   }, [tables, sociedadFilter]);
 
@@ -683,10 +695,11 @@ export default function Home() {
                     <div style={{padding:'1rem 1.25rem',borderBottom:'1px solid var(--border-color)',background:'#f8fafc',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                       <h2 style={{fontSize:'1.1rem',fontWeight:600,margin:0,marginRight:12}}>Sociedades Detalle</h2>
                       {[
-                        {k:'todas', l:'Todas',              c:'#475569'},
-                        {k:'bc',    l:'Solo BC (sin dCaC)', c:'#7c3aed'},
-                        {k:'dcac',  l:'En dCaC',            c:'#16a34a'},
-                        {k:'libres',l:'Cuentas Libres',     c:'#d97706'},
+                        {k:'todas',  l:'Todas',              c:'#475569'},
+                        {k:'bc',     l:'Solo BC (sin dCaC)', c:'#7c3aed'},
+                        {k:'dcac',   l:'En dCaC',            c:'#2563eb'},
+                        {k:'libres', l:'Cuentas Libres',     c:'#059669'},
+                        {k:'mermas', l:'⚠️ Mermas',          c:'#dc2626'},
                       ].map(({k,l,c}) => (
                         <button key={k}
                           onClick={() => { setSociedadFilter(k); setVisibleCountSOC(30); }}
