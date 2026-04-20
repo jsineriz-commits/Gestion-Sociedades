@@ -462,7 +462,7 @@ export default function Home() {
           {[{
             label: '📍 Provincia', active: activeProvs.length, badge: '#1d4ed8',
             open: expandProv, setOpen: setExpandProv,
-            onClear: () => setActiveProvs([]),
+            onClear: () => { setActiveProvs([]); setSelectedDeptos(prev => prev.filter(d => !activeProvs.some(p => d.prov === p.raw))); },
             content: (
               <>
                 <input placeholder="🔍 Buscar provincia..." value={searchProv} onChange={e=>setSearchProv(e.target.value)}
@@ -471,8 +471,17 @@ export default function Home() {
                   {ALL_PROVINCES.filter(p=>p.name.toLowerCase().includes(searchProv.toLowerCase())).map(p=>(
                     <label key={p.code} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:activeProvs.some(ap=>ap.code===p.code)?'#eff6ff':'transparent',fontSize:12.5}}>
                       <input type="checkbox" checked={activeProvs.some(ap=>ap.code===p.code)} onChange={e=>{
-                        if(e.target.checked) setActiveProvs([...activeProvs,p]);
-                        else setActiveProvs(activeProvs.filter(ap=>ap.code!==p.code));
+                        if(e.target.checked){
+                          setActiveProvs([...activeProvs,p]);
+                          // También resaltar deptos de la provincia en el mapa
+                          const provDepts=(Object.entries(zonaDataSidebar?.deptoMap||{})
+                            .filter(([n,info])=>!/^\d+$/.test(n)&&info.provincia===p.raw)
+                            .map(([name,info])=>({key:info.id?String(info.id):p.raw+'|'+name,name,prov:p.raw,d:{soc:0,kt:0,kv:0},zona:info.zona||''})));
+                          setSelectedDeptos(prev=>{const ex=new Set(prev.map(d=>d.name.toUpperCase()));return[...prev,...provDepts.filter(d=>!ex.has(d.name.toUpperCase()))];});
+                        } else {
+                          setActiveProvs(activeProvs.filter(ap=>ap.code!==p.code));
+                          setSelectedDeptos(prev=>prev.filter(d=>d.prov!==p.raw));
+                        }
                       }} style={{accentColor:'#1d4ed8',margin:0,flexShrink:0}}/>
                       {p.name}
                     </label>
@@ -483,7 +492,7 @@ export default function Home() {
           },{
             label: '🗺️ Zona', active: selectedZonas.length, badge: '#7c3aed',
             open: expandZona, setOpen: setExpandZona,
-            onClear: () => setSelectedZonas([]),
+            onClear: () => { setSelectedZonas([]); setSelectedDeptos(prev => prev.filter(d => !selectedZonas.includes(d.zona))); },
             content: zonaDataSidebar ? (
               <>
                 <input placeholder="🔍 Buscar zona..." value={searchZona} onChange={e=>setSearchZona(e.target.value)}
@@ -494,9 +503,18 @@ export default function Home() {
                     return (
                       <label key={z} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:selectedZonas.includes(z)?'#faf5ff':'transparent',fontSize:12.5}}>
                         <input type="checkbox" checked={selectedZonas.includes(z)} onChange={e=>{
-                          if(e.target.checked) setSelectedZonas([...selectedZonas,z]);
-                          else setSelectedZonas(selectedZonas.filter(s=>s!==z));
-                        }} style={{accentColor:'#7c3aed',margin:0,flexShrink:0}}/>
+                            if(e.target.checked){
+                              setSelectedZonas([...selectedZonas,z]);
+                              // También resaltar deptos de la zona en el mapa
+                              const zoneDepts=(zonaDataSidebar?.zonaDeptos?.[z]||[])
+                                .filter(n=>!/^\d+$/.test(n))
+                                .map(name=>{const info=zonaDataSidebar?.deptoMap?.[name]||{};return{key:info.id?String(info.id):(info.provincia||'')+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:z};});
+                              setSelectedDeptos(prev=>{const ex=new Set(prev.map(d=>d.name.toUpperCase()));return[...prev,...zoneDepts.filter(d=>!ex.has(d.name.toUpperCase()))];});
+                            } else {
+                              setSelectedZonas(selectedZonas.filter(s=>s!==z));
+                              setSelectedDeptos(prev=>prev.filter(d=>d.zona!==z));
+                            }
+                          }} style={{accentColor:'#7c3aed',margin:0,flexShrink:0}}/>
                         <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,display:'inline-block'}}/>
                         <span style={{flex:1,lineHeight:'1.3'}}>{z}</span>
                       </label>
@@ -514,13 +532,13 @@ export default function Home() {
                 <input placeholder="🔍 Buscar departamento..." value={searchDept} onChange={e=>setSearchDept(e.target.value)}
                   style={{width:'100%',padding:'5px 8px',borderRadius:5,border:'1px solid #e2e8f0',fontSize:12,marginBottom:6,outline:'none',boxSizing:'border-box'}}/>
                 <div style={{maxHeight:'180px',overflowY:'auto',display:'flex',flexDirection:'column',gap:1}}>
-                  {Object.entries(zonaDataSidebar.deptoMap||{}).filter(([n])=>n.toLowerCase().includes(searchDept.toLowerCase())).sort(([a],[b])=>a.localeCompare(b)).map(([name,info])=>{
+                  {Object.entries(zonaDataSidebar.deptoMap||{}).filter(([n])=>!/^\d+$/.test(n)&&n.toLowerCase().includes(searchDept.toLowerCase())).sort(([a],[b])=>a.localeCompare(b)).map(([name,info])=>{
                     const isChk=selectedDeptos.some(s=>s.name.toUpperCase()===name);
                     const disp=name.charAt(0)+name.slice(1).toLowerCase();
                     return (
                       <label key={name} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:isChk?'#f0fdf4':'transparent',fontSize:12.5}}>
                         <input type="checkbox" checked={isChk} onChange={e=>{
-                          if(e.target.checked) setSelectedDeptos([...selectedDeptos,{key:info.provincia+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:info.zona||''}]);
+                          if(e.target.checked) setSelectedDeptos([...selectedDeptos,{key:info.id?String(info.id):info.provincia+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:info.zona||''}]);
                           else setSelectedDeptos(selectedDeptos.filter(s=>s.name.toUpperCase()!==name));
                         }} style={{accentColor:'#059669',margin:0,flexShrink:0}}/>
                         <span style={{flex:1,lineHeight:'1.3'}}>{disp}</span>
