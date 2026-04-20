@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 
 const MapaTab   = dynamic(() => import('../src/MapaTab'),   { ssr: false });
@@ -54,8 +54,24 @@ export default function Home() {
   const [showGlosario, setShowGlosario] = useState(false);
   const [drilldownDep, setDrilldownDep] = useState(null);
   const [sortConfig, setSortConfig] = useState({ tab: null, field: null, dir: 'desc' });
-  // Departamentos seleccionados desde el mapa (filtro visual)
+  // Departamentos seleccionados desde el mapa o sidebar (filtro visual)
   const [selectedDeptos, setSelectedDeptos] = useState([]);
+  // Sidebar geográfico nuevo
+  const [zonaDataSidebar, setZonaDataSidebar] = useState(null);
+  const [selectedZonas, setSelectedZonas] = useState([]);
+  const [expandProv, setExpandProv] = useState(true);
+  const [expandZona, setExpandZona] = useState(false);
+  const [expandDept, setExpandDept] = useState(false);
+  const [searchProv, setSearchProv] = useState('');
+  const [searchZona, setSearchZona] = useState('');
+  const [searchDept, setSearchDept] = useState('');
+
+  // Cargar datos de zonas para el sidebar (cacheado en servidor)
+  useEffect(() => {
+    fetch('/api/zonas').then(r => r.ok ? r.json() : null).then(data => {
+      if (data && !data.error) setZonaDataSidebar(data);
+    }).catch(() => {});
+  }, []);
 
   const handleSort = (tab, field) => {
     setSortConfig(prev => {
@@ -183,6 +199,23 @@ export default function Home() {
       baseUsers = baseUsers.filter(r => {
         const p = (r.provincia || r.provincia_est || r.provincia_usuario || '').toUpperCase();
         return rawProvs.some(prov => p.includes(prov));
+      });
+    }
+
+    // ── Filtro por zonas seleccionadas en el sidebar ──────────────────────
+    if (selectedZonas.length > 0 && zonaDataSidebar?.deptoMap) {
+      const zonaSet = new Set(selectedZonas);
+      base188 = base188.filter(r => {
+        const dept = String(r.partido_establecimiento_senasa || r.partido_fiscal_senasa || '').trim().toUpperCase();
+        return zonaSet.has(zonaDataSidebar.deptoMap[dept]?.zona);
+      });
+      base189 = base189.filter(r => {
+        const dept = String(r.part_est_bc || r.part_dcac || r.partido_est_dcac || '').trim().toUpperCase();
+        return zonaSet.has(zonaDataSidebar.deptoMap[dept]?.zona);
+      });
+      baseUsers = baseUsers.filter(r => {
+        const dept = String(r.partido || r.partido_est || '').trim().toUpperCase();
+        return zonaSet.has(zonaDataSidebar.deptoMap[dept]?.zona);
       });
     }
 
@@ -368,7 +401,7 @@ export default function Home() {
         usuarios: baseUsers
       }
     };
-  }, [isEmpty, soloAmarillas, activeProvs, data188, data189, dataUsers, filtroPartido, filtroTextoGeneral, selectedDeptos]);
+  }, [isEmpty, soloAmarillas, activeProvs, data188, data189, dataUsers, filtroPartido, filtroTextoGeneral, selectedDeptos, selectedZonas, zonaDataSidebar]);
 
   // Filtro interno de la pestaña Sociedades Detalle
   const socFiltered = useMemo(() => {
@@ -397,16 +430,16 @@ export default function Home() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-color)' }}>
       
-      {/* SIDEBAR DE FILTROS — se muestra al hovear */}
+      {/* SIDEBAR DE FILTROS — hover para abrir */}
       <div
         onMouseEnter={() => setSidebarOpen(true)}
         onMouseLeave={() => setSidebarOpen(false)}
         style={{
-          width: sidebarOpen ? '320px' : '12px',
+          width: sidebarOpen ? '290px' : '12px',
           flexShrink: 0,
           borderRight: '1px solid var(--border-color)',
           background: sidebarOpen ? '#fff' : 'linear-gradient(to bottom, #e0e7ef, #f0f4f8)',
-          padding: sidebarOpen ? '1.5rem' : '0',
+          padding: sidebarOpen ? '1.1rem 0.9rem' : '0',
           display: 'flex',
           flexDirection: 'column',
           height: '100vh',
@@ -418,97 +451,128 @@ export default function Home() {
           cursor: sidebarOpen ? 'default' : 'pointer',
           zIndex: 100,
           boxShadow: sidebarOpen ? '4px 0 16px rgba(0,0,0,0.08)' : 'none',
+          gap: 4,
         }}
       >
         {sidebarOpen && (<>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '2rem', color: 'var(--accent)' }}>Neo<span style={{color:'#1e293b'}}>Panel</span></h2>
-        
-        <h3 className="kpi-title" style={{ marginBottom: '1rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.5rem' }}>Filtro de Datos Nativos</h3>
-        
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontWeight: '600', marginBottom: '0.75rem', fontSize: '13px', color: '#475569' }}>Provincias de Búsqueda</p>
-          <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.5rem', background: '#f8fafc', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
-            {ALL_PROVINCES.map(p => (
-              <label key={p.code} style={{ display: 'flex', alignItems: 'center', padding: '0.4rem 0.2rem', cursor: 'pointer', borderBottom: '1px solid #e2e8f0', margin: 0 }}>
-                <input 
-                  type="checkbox" 
-                  checked={activeProvs.some(ap => ap.code === p.code)}
-                  onChange={(e) => {
-                    if (e.target.checked) setActiveProvs([...activeProvs, p]);
-                    else setActiveProvs(activeProvs.filter(ap => ap.code !== p.code));
-                  }}
-                  style={{ marginRight: '0.75rem', width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--accent)' }}
-                />
-                <span style={{ fontSize: '14px', color: '#1e293b', fontWeight: 500 }}>{p.name}</span>
-              </label>
-            ))}
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.75rem', color: 'var(--accent)' }}>Neo<span style={{color:'#1e293b'}}>Panel</span></h2>
+          <p style={{ fontWeight:700, fontSize:'10px', color:'#94a3b8', letterSpacing:'0.1em', marginBottom:'0.5rem', textTransform:'uppercase' }}>Filtros Geográficos</p>
+
+          {/* ─── Accordión: Provincia ─── */}
+          {[{
+            label: '📍 Provincia', active: activeProvs.length, badge: '#1d4ed8',
+            open: expandProv, setOpen: setExpandProv,
+            onClear: () => setActiveProvs([]),
+            content: (
+              <>
+                <input placeholder="🔍 Buscar provincia..." value={searchProv} onChange={e=>setSearchProv(e.target.value)}
+                  style={{width:'100%',padding:'5px 8px',borderRadius:5,border:'1px solid #e2e8f0',fontSize:12,marginBottom:6,outline:'none',boxSizing:'border-box'}}/>
+                <div style={{maxHeight:'160px',overflowY:'auto',display:'flex',flexDirection:'column',gap:1}}>
+                  {ALL_PROVINCES.filter(p=>p.name.toLowerCase().includes(searchProv.toLowerCase())).map(p=>(
+                    <label key={p.code} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:activeProvs.some(ap=>ap.code===p.code)?'#eff6ff':'transparent',fontSize:12.5}}>
+                      <input type="checkbox" checked={activeProvs.some(ap=>ap.code===p.code)} onChange={e=>{
+                        if(e.target.checked) setActiveProvs([...activeProvs,p]);
+                        else setActiveProvs(activeProvs.filter(ap=>ap.code!==p.code));
+                      }} style={{accentColor:'#1d4ed8',margin:0,flexShrink:0}}/>
+                      {p.name}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )
+          },{
+            label: '🗺️ Zona', active: selectedZonas.length, badge: '#7c3aed',
+            open: expandZona, setOpen: setExpandZona,
+            onClear: () => setSelectedZonas([]),
+            content: zonaDataSidebar ? (
+              <>
+                <input placeholder="🔍 Buscar zona..." value={searchZona} onChange={e=>setSearchZona(e.target.value)}
+                  style={{width:'100%',padding:'5px 8px',borderRadius:5,border:'1px solid #e2e8f0',fontSize:12,marginBottom:6,outline:'none',boxSizing:'border-box'}}/>
+                <div style={{maxHeight:'160px',overflowY:'auto',display:'flex',flexDirection:'column',gap:1}}>
+                  {(zonaDataSidebar.zonasOrdenadas||[]).filter(z=>z.toLowerCase().includes(searchZona.toLowerCase())).map(z=>{
+                    const col=zonaDataSidebar.zonaColors?.[z]||'#64748b';
+                    return (
+                      <label key={z} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:selectedZonas.includes(z)?'#faf5ff':'transparent',fontSize:12.5}}>
+                        <input type="checkbox" checked={selectedZonas.includes(z)} onChange={e=>{
+                          if(e.target.checked) setSelectedZonas([...selectedZonas,z]);
+                          else setSelectedZonas(selectedZonas.filter(s=>s!==z));
+                        }} style={{accentColor:'#7c3aed',margin:0,flexShrink:0}}/>
+                        <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,display:'inline-block'}}/>
+                        <span style={{flex:1,lineHeight:'1.3'}}>{z}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            ) : <p style={{fontSize:11,color:'#94a3b8',margin:0}}>Cargando zonas...</p>
+          },{
+            label: '🏣 Departamento', active: selectedDeptos.length, badge: '#059669',
+            open: expandDept, setOpen: setExpandDept,
+            onClear: () => setSelectedDeptos([]),
+            content: zonaDataSidebar ? (
+              <>
+                <input placeholder="🔍 Buscar departamento..." value={searchDept} onChange={e=>setSearchDept(e.target.value)}
+                  style={{width:'100%',padding:'5px 8px',borderRadius:5,border:'1px solid #e2e8f0',fontSize:12,marginBottom:6,outline:'none',boxSizing:'border-box'}}/>
+                <div style={{maxHeight:'180px',overflowY:'auto',display:'flex',flexDirection:'column',gap:1}}>
+                  {Object.entries(zonaDataSidebar.deptoMap||{}).filter(([n])=>n.toLowerCase().includes(searchDept.toLowerCase())).sort(([a],[b])=>a.localeCompare(b)).map(([name,info])=>{
+                    const isChk=selectedDeptos.some(s=>s.name.toUpperCase()===name);
+                    const disp=name.charAt(0)+name.slice(1).toLowerCase();
+                    return (
+                      <label key={name} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',borderRadius:4,cursor:'pointer',background:isChk?'#f0fdf4':'transparent',fontSize:12.5}}>
+                        <input type="checkbox" checked={isChk} onChange={e=>{
+                          if(e.target.checked) setSelectedDeptos([...selectedDeptos,{key:info.provincia+'|'+name,name,prov:info.provincia||'',d:{soc:0,kt:0,kv:0},zona:info.zona||''}]);
+                          else setSelectedDeptos(selectedDeptos.filter(s=>s.name.toUpperCase()!==name));
+                        }} style={{accentColor:'#059669',margin:0,flexShrink:0}}/>
+                        <span style={{flex:1,lineHeight:'1.3'}}>{disp}</span>
+                        {info.zona && <span style={{fontSize:9,color:'#94a3b8',flexShrink:0}}>{info.zona.split(' ').slice(0,2).join(' ')}</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            ) : <p style={{fontSize:11,color:'#94a3b8',margin:0}}>Cargando deptos...</p>
+          }].map(({label,active,badge,open,setOpen,onClear,content})=>(
+            <div key={label} style={{borderRadius:7,border:'1px solid #e2e8f0',overflow:'hidden',marginBottom:4}}>
+              <div onClick={()=>setOpen(!open)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:'#f8fafc',cursor:'pointer',userSelect:'none'}}>
+                <span style={{fontWeight:600,fontSize:12.5,color:'#1e293b'}}>{label}
+                  {active>0 && <span style={{marginLeft:5,background:badge,color:'#fff',borderRadius:99,fontSize:10,padding:'1px 6px'}}>{active}</span>}
+                </span>
+                <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                  {active>0 && <button onClick={e=>{e.stopPropagation();onClear();}} style={{fontSize:10,color:'#64748b',border:'1px solid #e2e8f0',borderRadius:4,padding:'1px 5px',background:'#fff',cursor:'pointer'}}>✕</button>}
+                  <span style={{color:'#94a3b8',fontSize:10}}>{open?'▲':'▼'}</span>
+                </div>
+              </div>
+              {open && <div style={{padding:'8px 10px',background:'#fff'}}>{content}</div>}
+            </div>
+          ))}
+
+          {/* Amarillas toggle */}
+          <div style={{marginBottom:4,padding:'8px 10px',background:soloAmarillas?'#fef3c7':'#f8fafc',border:`1px solid ${soloAmarillas?'#fcd34d':'#e2e8f0'}`,borderRadius:7,transition:'all 0.3s'}}>
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',margin:0}}>
+              <input type="checkbox" checked={soloAmarillas} onChange={e=>setSoloAmarillas(e.target.checked)} style={{accentColor:'#d97706',margin:0,width:14,height:14,flexShrink:0}}/>
+              <span style={{fontSize:11.5,color:'#92400e',fontWeight:600,lineHeight:'1.3'}}>⚡ Solo Candidatas "Amarillas"<br/><span style={{fontSize:10,fontWeight:400}}>(Inactivas {'>'}15M y sin AC)</span></span>
+            </label>
           </div>
-        </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontWeight: '600', marginBottom: '0.75rem', fontSize: '13px', color: '#475569' }}>Partido / Localidad</p>
-          <input 
-            type="text"
-            placeholder="Ej: Paso de los libres..."
-            value={filtroPartido}
-            onChange={(e) => setFiltroPartido(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-          />
-        </div>
+          {/* Buscador general texto */}
+          <div style={{marginBottom:4}}>
+            <input placeholder="🔍 Buscar: Sociedad, CUIT, Nombre..." value={filtroTextoGeneral} onChange={e=>setFiltroTextoGeneral(e.target.value)}
+              style={{width:'100%',padding:'7px 9px',borderRadius:7,border:'1px solid #93c5fd',fontSize:12,outline:'none',boxSizing:'border-box',boxShadow:'0 0 0 2px rgba(37,99,235,0.1)'}}/>
+          </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontWeight: '600', marginBottom: '0.75rem', fontSize: '13px', color: '#475569' }}>Buscador General (Frontend)</p>
-          <input 
-            type="text"
-            placeholder="Sociedad, CUIT, Nombre, Apellido..."
-            value={filtroTextoGeneral}
-            onChange={(e) => setFiltroTextoGeneral(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--accent)', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxShadow: '0 1px 3px rgba(37,99,235,0.2)' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontWeight: '600', marginBottom: '0.75rem', fontSize: '13px', color: '#475569' }}>Búsqueda en Base Usuarios</p>
-          <input 
-            type="text"
-            placeholder="Forzar usuario desde el servidor..."
-            value={busquedaUsuarios}
-            onChange={(e) => setBusquedaUsuarios(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-          />
-        </div>
-        
-        {/* BOTÓN EXTRAORDINARIO AMARILLAS */}
-        <div style={{ marginBottom: '1.5rem', padding: '0.8rem', background: soloAmarillas ? '#fef3c7' : '#fff', border: `1px solid ${soloAmarillas ? '#fcd34d' : 'var(--border-color)'}`, borderRadius: '6px', transition: 'all 0.3s' }}>
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', margin: 0 }}>
-            <input 
-              type="checkbox" 
-              checked={soloAmarillas}
-              onChange={(e) => setSoloAmarillas(e.target.checked)}
-              style={{ marginRight: '0.75rem', width: '16px', height: '16px', accentColor: '#d97706', cursor: 'pointer' }}
-            />
-            <span style={{ fontSize: '13.5px', color: '#92400e', fontWeight: 600 }}>Solo Candidatas "Amarillas" <br/><span style={{fontSize: '11px', fontWeight: 400}}>(Inactivas &gt; 15M y sin AC Mapeado)</span></span>
-          </label>
-        </div>
-        
-        <div style={{ marginTop: 'auto', padding: '1rem', background: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
-          <button 
-            onClick={handleFetchData}
-            disabled={loading}
-            style={{ width: '100%', padding: '0.8rem', background: loading ? '#93c5fd' : '#1d4ed8', color: '#fff', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(29,78,216,0.3)', marginBottom: '0.5rem' }}
-          >
-            {loading ? 'Consultando...' : (isEmpty ? 'Buscar en Metabase' : 'Actualizar Datos')}
-          </button>
-
-          {!isEmpty && (
-              <button 
-                style={{ width: '100%', padding: '0.6rem', background: '#fff', border: '1px solid #93c5fd', color: '#1d4ed8', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}
-                onClick={() => { setActiveProvs([]); setFiltroPartido(''); setSoloAmarillas(false); setData188(null); setData189(null); }}
-              >
-                Limpiar todo y Volver
-              </button>
-          )}
-        </div>
+          {/* Buscar en Metabase */}
+          <div style={{marginTop:'auto',paddingTop:8}}>
+            <button onClick={handleFetchData} disabled={loading}
+              style={{width:'100%',padding:'9px',background:loading?'#93c5fd':'#1d4ed8',color:'#fff',border:'none',borderRadius:7,cursor:loading?'not-allowed':'pointer',fontSize:13,fontWeight:700,boxShadow:'0 2px 4px rgba(29,78,216,0.3)',marginBottom:5}}>
+              {loading ? '⏳ Consultando...' : (isEmpty ? '🔍 Buscar en Metabase' : '🔄 Actualizar Datos')}
+            </button>
+            {!isEmpty && (
+              <button
+                style={{width:'100%',padding:'6px',background:'#fff',border:'1px solid #e2e8f0',color:'#64748b',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:600}}
+                onClick={()=>{setActiveProvs([]);setSelectedZonas([]);setSelectedDeptos([]);setFiltroPartido('');setSoloAmarillas(false);setData188(null);setData189(null);}}
+              >✕ Limpiar todo y Volver</button>
+            )}
+          </div>
         </>)}
       </div>
 
